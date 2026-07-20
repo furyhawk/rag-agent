@@ -80,12 +80,14 @@ onMounted && setTimeout(() => {
 
 async function fetchHealth() {
   try {
-    const data = await api.ready();
-    store.health = { ...data, status: 'ok' };
+    // Use raw fetch so we can read the body even on 503 (degraded)
+    const res = await fetch('/ready');
+    const data = await res.json();
+    store.health = data;
   } catch {
     try {
       const data = await api.health();
-      store.health = { ...data, status: 'ok' };
+      store.health = data;
     } catch {
       store.health = { status: 'error', error: 'Cannot reach API' };
     }
@@ -207,11 +209,14 @@ const DashboardPage = {
         return;
       }
       const checks = h.checks || {};
+      function healthy(key) {
+        return checks[key]?.status === 'healthy';
+      }
       const svcs = [
-        { name: 'API', key: null, status: 'ok', label: 'Running' },
-        { name: 'Database', key: 'database', status: checks.database ? 'ok' : 'err', label: checks.database ? 'Connected' : 'Down' },
-        { name: 'Valkey', key: 'valkey', status: checks.valkey ? 'ok' : 'err', label: checks.valkey ? 'Connected' : 'Down' },
-        { name: 'Milvus', key: 'milvus', status: checks.milvus ? 'ok' : 'err', label: checks.milvus ? 'Connected' : 'Down' },
+        { name: 'API', status: 'ok', label: 'Running' },
+        { name: 'Database', status: healthy('postgres') ? 'ok' : 'err', label: healthy('postgres') ? 'Connected' : 'Down' },
+        { name: 'Valkey', status: healthy('valkey') ? 'ok' : 'err', label: healthy('valkey') ? 'Connected' : 'Down' },
+        { name: 'Milvus', status: healthy('milvus') ? 'ok' : 'err', label: healthy('milvus') ? 'Connected' : 'Down' },
       ];
       services.value = svcs;
     }, { immediate: true });
@@ -800,8 +805,12 @@ const app = createApp({
       const map = { dashboard: DashboardPage, documents: DocumentsPage, document: DocumentDetailPage, collections: CollectionsPage, search: SearchPage };
       return map[store.page] || DashboardPage;
     });
-    const isConnected = computed(() => store.health?.status === 'ok');
-    const statusLabel = computed(() => store.health?.status === 'ok' ? 'Connected' : (store.health?.error || 'Offline'));
+    const isConnected = computed(() => store.health?.status === 'ready' || store.health?.status === 'ok');
+    const statusLabel = computed(() => {
+      if (store.health?.status === 'ready' || store.health?.status === 'ok') return 'Connected';
+      if (store.health?.status === 'degraded') return 'Degraded';
+      return store.health?.error || 'Offline';
+    });
 
     return { store, pageTitle, pageComponent, isConnected, statusLabel, navigate, fmtDate, icons: Icons };
   },

@@ -7,7 +7,7 @@ import time
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from rag_agent.core.database import check_connection as check_db
+from rag_agent.core.database import check_connection_detailed as check_db
 from rag_agent.core.valkey import check_connection as check_valkey
 
 router = APIRouter(tags=["health"])
@@ -33,13 +33,14 @@ async def readiness() -> JSONResponse:
 
     # PostgreSQL
     start = time.monotonic()
-    if await check_db():
+    db_ok, db_error = await check_db()
+    if db_ok:
         checks["postgres"] = {
             "status": "healthy",
             "latency_ms": round((time.monotonic() - start) * 1000, 1),
         }
     else:
-        checks["postgres"] = {"status": "unhealthy", "error": "connection failed"}
+        checks["postgres"] = {"status": "unhealthy", "error": db_error or "connection failed"}
         overall = False
 
     # Valkey

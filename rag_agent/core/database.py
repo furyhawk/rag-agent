@@ -62,7 +62,7 @@ async def open_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def check_connection() -> bool:
-    """Check if the database is reachable."""
+    """Check if the database is reachable. Returns True/False."""
     try:
         async with open_session() as session:
             from sqlalchemy import text
@@ -70,3 +70,14 @@ async def check_connection() -> bool:
         return True
     except Exception:
         return False
+
+
+async def check_connection_detailed() -> tuple[bool, str | None]:
+    """Check if the database is reachable. Returns (ok, error_message)."""
+    try:
+        async with open_session() as session:
+            from sqlalchemy import text
+            await session.execute(text("SELECT 1"))
+        return True, None
+    except Exception as e:
+        return False, str(e)
