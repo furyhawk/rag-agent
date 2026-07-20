@@ -1,0 +1,187 @@
+# ──────────────────────────────────────────────────────────────────
+#  RAG Agent — Document Ingestion & Retrieval Service
+#
+#  Usage (podman or docker — either works):
+#    podman compose up -d              # start everything
+#    docker compose up -d              # start everything
+#    docker compose up -d --build      # rebuild & start
+#    docker compose down               # stop & remove
+#    docker compose up api worker      # start only app services
+# ──────────────────────────────────────────────────────────────────
+
+services:
+  # ── FastAPI Application ──────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-agent-api
+    ports:
+      - "8100:8100"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
+      - VALKEY_URL=redis://valkey:6379/0
+      - MILVUS_URI=http://milvus:19530
+      - MILVUS_TOKEN=${MILVUS_TOKEN:-}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-384}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - MEDIA_DIR=/data/media
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
+      - DEBUG=${DEBUG:-false}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+    volumes:
+      - media_data:/data/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      milvus:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8100/ready').raise_for_status()"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "host.containers.internal:host-gateway"
+
+  # ── ARQ Worker ──────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-agent-worker
+    command: arq rag_agent.worker.settings.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
+      - VALKEY_URL=redis://valkey:6379/0
+      - MILVUS_URI=http://milvus:19530
+      - MILVUS_TOKEN=${MILVUS_TOKEN:-}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-384}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - MEDIA_DIR=/data/media
+      - CROSS_ENCODER_MODEL=${CROSS_ENCODER_MODEL:-cross-encoder/ms-marco-MiniLM-L6-v2}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+    volumes:
+      - media_data:/data/media
+      - model_cache:/root/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      milvus:
+        condition: service_started
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "host.containers.internal:host-gateway"
+
+  # ── PostgreSQL ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag-agent-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Valkey (Redis-compatible) ────────────────────────────────────
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: rag-agent-valkey
+    ports:
+      - "6380:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Milvus Vector Database ──────────────────────────────────────
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.18
+    container_name: rag-agent-etcd
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://0.0.0.0:2379"
+      ETCD_DATA_DIR: /etcd
+    volumes:
+      - etcd_data:/etcd
+    restart: unless-stopped
+
+  milvus-minio:
+    image: minio/minio:latest
+    container_name: rag-agent-minio
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+
+  milvus:
+    image: milvusdb/milvus:v2.5.4
+    container_name: rag-agent-milvus
+    ports:
+      - "19530:19530"
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    command: milvus run standalone
+    depends_on:
+      - milvus-etcd
+      - milvus-minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  valkey_data:
+  etcd_data:
+  minio_data:
+  milvus_data:
+  media_data:
+  model_cache:
