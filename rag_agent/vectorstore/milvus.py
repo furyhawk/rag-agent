@@ -5,11 +5,11 @@ Extracted and generalized from agent_alpha/backend/services/rag/vectorstore.py.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pymilvus import AsyncMilvusClient, DataType
 
+from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.service import EmbeddingService
 from rag_agent.models.collection import CollectionInfo
 from rag_agent.models.common import DocumentInfo
@@ -17,7 +17,7 @@ from rag_agent.models.document import Document
 from rag_agent.models.search import SearchResult
 from rag_agent.vectorstore.base import BaseVectorStore
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MilvusVectorStore(BaseVectorStore):

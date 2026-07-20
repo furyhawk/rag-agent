@@ -5,7 +5,6 @@ Extracted and generalized from agent_alpha.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -13,13 +12,14 @@ from rag_agent.chunkers.base import BaseChunker
 from rag_agent.chunkers.markdown import MarkdownChunker
 from rag_agent.chunkers.recursive import RecursiveChunker
 from rag_agent.core.config import RAGSettings
+from rag_agent.core.logging import get_logger
 from rag_agent.models.document import Document, DocumentChunk
 from rag_agent.parsers.base import BaseDocumentParser
 from rag_agent.parsers.docx import DocxDocumentParser
 from rag_agent.parsers.pdf import PyMuPDFParser
 from rag_agent.parsers.text import TextDocumentParser
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DocumentProcessor:

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import logging
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
+from rag_agent.core.logging import get_logger
+
 T = TypeVar("T")
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def retry(

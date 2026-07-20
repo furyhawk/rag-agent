@@ -28,7 +28,13 @@ async def trigger_sync(
 
     sync_service = SyncService(
         session=session,
-        ingestion_service=IngestionService.build(settings.rag, settings.milvus_uri, settings.milvus_token),
+        ingestion_service=IngestionService.build(
+            settings.rag,
+            settings.milvus_uri,
+            settings.milvus_token,
+            embedding_api_key=settings.embedding_api_key,
+            embedding_base_url=settings.embedding_base_url,
+        ),
         settings=RAGSettings(),
     )
     log_id = await sync_service.sync_local_directory(

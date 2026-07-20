@@ -77,7 +77,7 @@ class IngestionService:
             try:
                 await self._on_event(event, data)
             except Exception as e:
-                logger.warning("Event dispatch failed: %s", e)
+                logger.warning("Event dispatch failed", exc_info=e)
 
     async def _notify(
         self,

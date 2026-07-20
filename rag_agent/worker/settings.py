@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 from urllib.parse import urlparse
 
 from arq.connections import RedisSettings
 
-logger = logging.getLogger(__name__)
+from rag_agent.core.config import get_settings
+from rag_agent.core.logging import get_logger, setup_logging
+
+# Initialize structured logging for the worker process
+settings = get_settings()
+setup_logging(level=settings.log_level, log_format=settings.log_format)
+
+logger = get_logger(__name__)
 
 
 async def _noop_job(ctx) -> None:

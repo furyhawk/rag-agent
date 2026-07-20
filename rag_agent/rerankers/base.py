@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 
+from rag_agent.core.logging import get_logger
 from rag_agent.models.search import SearchResult
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BaseReranker(ABC):

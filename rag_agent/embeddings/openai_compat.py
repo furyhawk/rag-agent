@@ -5,14 +5,13 @@ Works with any OpenAI-compatible endpoint: OpenAI, Ollama, vLLM, TEI, etc.
 
 from __future__ import annotations
 
-import logging
-
 from openai import OpenAI
 
 from rag_agent.embeddings.base import BaseEmbeddingProvider
+from rag_agent.core.logging import get_logger
 from rag_agent.models.document import Document
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class OpenAIEmbeddingProvider(BaseEmbeddingProvider):

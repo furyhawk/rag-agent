@@ -5,17 +5,17 @@ Extracted and generalized from agent_alpha/backend/services/rag/retrieval.py.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from rag_agent.core.config import RAGSettings
+from rag_agent.core.logging import get_logger
 from rag_agent.models.search import SearchResult
 from rag_agent.rerankers.base import CrossEncoderReranker
 from rag_agent.rerankers.service import RerankService
 from rag_agent.retrieval.bm25 import BM25Searcher
 from rag_agent.vectorstore.base import BaseVectorStore
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RetrievalService:
