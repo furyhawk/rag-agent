@@ -16,19 +16,18 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rag-agent-api
-    ports:
-      - "8100:8100"
+    network_mode: "host"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
-      - VALKEY_URL=redis://valkey:6379/0
-      - MILVUS_URI=http://milvus:19530
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@localhost:5433/rag
+      - VALKEY_URL=redis://localhost:6380/0
+      - MILVUS_URI=http://localhost:19530
       - MILVUS_TOKEN=${MILVUS_TOKEN:-}
-      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:8012/v1}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://localhost:8012/v1}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - EMBEDDING_DIM=${EMBEDDING_DIM:-384}
-      - LLM_BASE_URL=${LLM_BASE_URL:-}
-      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=
+      - LLM_API_KEY=
       - LLM_MODEL=${LLM_MODEL:-}
       - MEDIA_DIR=/data/media
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
@@ -50,9 +49,6 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-      - "host.containers.internal:host-gateway"
 
   # ── ARQ Worker ──────────────────────────────────────────────────
   worker:
@@ -60,18 +56,19 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rag-agent-worker
+    network_mode: "host"
     command: arq rag_agent.worker.settings.WorkerSettings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
-      - VALKEY_URL=redis://valkey:6379/0
-      - MILVUS_URI=http://milvus:19530
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@localhost:5433/rag
+      - VALKEY_URL=redis://localhost:6380/0
+      - MILVUS_URI=http://localhost:19530
       - MILVUS_TOKEN=${MILVUS_TOKEN:-}
-      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:8012/v1}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://localhost:8012/v1}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - EMBEDDING_DIM=${EMBEDDING_DIM:-384}
-      - LLM_BASE_URL=${LLM_BASE_URL:-}
-      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=
+      - LLM_API_KEY=
       - LLM_MODEL=${LLM_MODEL:-}
       - MEDIA_DIR=/data/media
       - CROSS_ENCODER_MODEL=${CROSS_ENCODER_MODEL:-cross-encoder/ms-marco-MiniLM-L6-v2}
@@ -88,9 +85,6 @@ services:
       milvus:
         condition: service_started
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-      - "host.containers.internal:host-gateway"
 
   # ── PostgreSQL ──────────────────────────────────────────────────
   postgres:
