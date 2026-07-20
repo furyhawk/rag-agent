@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from rag_agent.core.config import get_settings
 from rag_agent.core.database import close_engine, init_engine
@@ -88,5 +91,18 @@ def create_app(settings=None, test_mode: bool = False) -> FastAPI:
     app.include_router(documents_router)
     app.include_router(search_router)
     app.include_router(sync_router)
+
+    # ── Frontend static files ──────────────────────────────
+    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+    if frontend_dir.is_dir():
+        app.mount(
+            "/ui",
+            StaticFiles(directory=str(frontend_dir), html=True),
+            name="frontend",
+        )
+
+        @app.get("/", include_in_schema=False)
+        async def root_redirect():
+            return RedirectResponse(url="/ui/")
 
     return app
