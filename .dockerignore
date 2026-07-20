@@ -1,0 +1,68 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments - CRITICAL for Docker build performance
+venv/
+.venv/
+env/
+*/env/
+*/venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.coverage.*
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Data
+data/
+uploads/
+media/
+*.db
+*.sqlite3
+milvus-data/
+
+# Vector stores & models
+*.bin
+*.pkl
+*.joblib
+*.onnx
+.huggingface/
+cache/
