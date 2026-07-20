@@ -16,6 +16,7 @@ Production-grade, self-hosted document ingestion and retrieval service.
 - **Pluggable connectors**: Local filesystem (ready), S3/Google Drive (pluggable)
 - **Deduplication**: Content hash + source path matching
 - **Batched embedding**: Configurable batch size with retry
+- **Web dashboard**: Responsive dark-themed UI for all operations
 - **uv Python manager**: Fast dependency installation and management
 - **Makefile**: Simplified task management
 
@@ -30,7 +31,28 @@ Upload → Validate → Store → Track (DB) → Queue (ARQ)
           SSE Status Events
                 ↓
            Query → Search
+                ↓
+          Web Dashboard  ←── You are here
 ```
+
+## Web UI
+
+The project includes a responsive dark-themed web dashboard built with Vue 3
+(served as static files from the FastAPI application).
+
+**Pages:**
+
+| Page | Description |
+|------|-------------|
+| **Dashboard** | System health, collection stats, recent documents |
+| **Documents** | Upload (drag & drop), list/filter, delete, retry, download |
+| **Collections** | Create, browse, delete vector collections |
+| **Search** | Semantic search with reranker, multi-collection mode, score visualization |
+
+**Access the UI at** [`http://localhost:8100/`](http://localhost:8100/) (redirects to `/ui/`).
+
+The frontend is served directly by the API server — no separate build step or
+dev server needed. Source lives in the `frontend/` directory.
 
 ## Quick Start
 
