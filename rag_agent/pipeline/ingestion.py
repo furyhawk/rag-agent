@@ -6,18 +6,18 @@ Improvements: progress callbacks, indexed dedup via DB.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from rag_agent.core.config import RAGSettings
+from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.service import EmbeddingService
 from rag_agent.models.ingestion import IngestionResult, IngestionStatus
 from rag_agent.models.document import Document
 from rag_agent.pipeline.processor import DocumentProcessor
 from rag_agent.vectorstore.base import BaseVectorStore
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 ProgressCallback = Callable[[IngestionStatus, int, int], Awaitable[None]]
 

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 import time
 
 from rag_agent.core.config import RAGSettings
+from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.base import BaseEmbeddingProvider
 from rag_agent.embeddings.openai_compat import OpenAIEmbeddingProvider
 from rag_agent.models.document import Document
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EmbeddingService:
