@@ -42,22 +42,23 @@ async def close_engine() -> None:
         logger.info("database.engine_closed")
 
 
-@asynccontextmanager
 async def open_session() -> AsyncGenerator[AsyncSession, None]:
-    """Open a database session as an async context manager.
+    """Open a database session as a dependency.
 
     Commits on success, rolls back on exception.
     """
     if _session_factory is None:
         raise RuntimeError("Database engine not initialized. Call init_engine() first.")
 
-    async with _session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    session = _session_factory()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
 
 
 async def check_connection() -> bool:

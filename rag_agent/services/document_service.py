@@ -17,6 +17,7 @@ from rag_agent.schemas.document import (
     DocumentUploadResponse,
     RetryResponse,
 )
+from rag_agent.worker.dispatcher import TaskDispatcher
 
 
 class DocumentService:
@@ -51,6 +52,19 @@ class DocumentService:
             vector_document_id=vector_document_id,
         )
         await self._repo.create(doc)
+
+        # Enqueue background task for processing
+        from rag_agent.core.config import get_settings
+        settings = get_settings()
+        dispatcher = TaskDispatcher(settings.valkey_url)
+        await dispatcher.enqueue(
+            "process_document",
+            doc_id=str(doc.id),
+            collection_name=collection_name,
+            storage_path=str(storage_path),
+            filename=filename,
+        )
+
         return DocumentUploadResponse(
             id=str(doc.id),
             filename=filename,
