@@ -20,7 +20,7 @@ def get_settings_dep() -> Settings:
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Provide a database session."""
-    async with open_session() as session:
+    async for session in open_session():
         yield session
 
 

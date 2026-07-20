@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -45,7 +44,8 @@ async def close_engine() -> None:
 async def open_session() -> AsyncGenerator[AsyncSession, None]:
     """Open a database session as a dependency.
 
-    Commits on success, rolls back on exception.
+    Use via ``async for session in open_session():`` for direct usage,
+    or ``Depends(open_session)`` in FastAPI route handlers.
     """
     if _session_factory is None:
         raise RuntimeError("Database engine not initialized. Call init_engine() first.")
@@ -64,7 +64,7 @@ async def open_session() -> AsyncGenerator[AsyncSession, None]:
 async def check_connection() -> bool:
     """Check if the database is reachable. Returns True/False."""
     try:
-        async with open_session() as session:
+        async for session in open_session():
             from sqlalchemy import text
             await session.execute(text("SELECT 1"))
         return True
@@ -75,7 +75,7 @@ async def check_connection() -> bool:
 async def check_connection_detailed() -> tuple[bool, str | None]:
     """Check if the database is reachable. Returns (ok, error_message)."""
     try:
-        async with open_session() as session:
+        async for session in open_session():
             from sqlalchemy import text
             await session.execute(text("SELECT 1"))
         return True, None
