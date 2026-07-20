@@ -14,9 +14,10 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy application source and configuration
+# Copy application source, configuration, and frontend
 COPY pyproject.toml .
 COPY rag_agent/ rag_agent/
+COPY frontend/ frontend/
 COPY alembic.ini .
 
 # Install Python dependencies (requires source for hatchling wheel build)

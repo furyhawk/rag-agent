@@ -35,6 +35,7 @@ services:
       - LOG_FORMAT=${LOG_FORMAT:-json}
     volumes:
       - media_data:/data/media
+      - ./frontend:/app/frontend:ro
     depends_on:
       postgres:
         condition: service_healthy
