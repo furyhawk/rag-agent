@@ -40,8 +40,8 @@ async def get_vector_store(settings: SettingsDep) -> BaseVectorStore:
 @router.post("/api/v1/search")
 async def search(
     request: SearchRequest,
+    settings: SettingsDep,
     vector_store: BaseVectorStore = Depends(get_vector_store),
-    settings: SettingsDep = Depends(),
 ) -> SearchResponse:
     retrieval = RetrievalService(
         settings=settings.rag,
@@ -76,8 +76,8 @@ async def search(
 @router.post("/api/v1/search/multi")
 async def search_multi(
     request: SearchRequest,
+    settings: SettingsDep,
     vector_store: BaseVectorStore = Depends(get_vector_store),
-    settings: SettingsDep = Depends(),
 ) -> MultiSearchResponse:
     if not request.collection_names:
         raise ValueError("collection_names required for multi-search")
@@ -114,9 +114,9 @@ async def search_by_document(
     collection_name: str,
     document_id: str,
     query: str,
+    settings: SettingsDep,
     limit: int = 5,
     vector_store: BaseVectorStore = Depends(get_vector_store),
-    settings: SettingsDep = Depends(),
 ) -> SearchResponse:
     retrieval = RetrievalService(
         settings=settings.rag,

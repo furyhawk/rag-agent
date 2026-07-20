@@ -41,9 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("app.stopped")
 
 
-def create_app() -> FastAPI:
+def create_app(settings=None, test_mode: bool = False) -> FastAPI:
     """Create and configure the FastAPI application."""
-    settings = get_settings()
+    if settings is None:
+        settings = get_settings()
 
     # Initialize logging early
     setup_logging(level=settings.log_level, log_format=settings.log_format)
@@ -52,7 +53,7 @@ def create_app() -> FastAPI:
         title="RAG Agent",
         description="Production-grade document ingestion and retrieval service",
         version="0.1.0",
-        lifespan=lifespan,
+        lifespan=lifespan if not test_mode else None,
     )
 
     # CORS

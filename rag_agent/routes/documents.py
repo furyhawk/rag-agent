@@ -31,10 +31,10 @@ router = APIRouter(tags=["documents"])
 
 @router.post("/api/v1/documents/upload")
 async def upload_document(
+    settings: SettingsDep,
     file: UploadFile = File(...),
     collection_name: str = Query("documents"),
     replace: bool = Query(True),
-    settings: SettingsDep = Depends(),
     session: AsyncSession = Depends(open_session),
 ) -> DocumentUploadResponse:
     allowed = {".txt", ".md", ".docx", ".pdf"}

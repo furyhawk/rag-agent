@@ -16,11 +16,11 @@ router = APIRouter(tags=["sync"])
 
 @router.post("/api/v1/sync")
 async def trigger_sync(
+    settings: SettingsDep,
+    session: AsyncSession = Depends(open_session),
     collection_name: str = Query("documents"),
     path: str = Query(...),
     mode: str = Query("full"),
-    session: AsyncSession = Depends(open_session),
-    settings: SettingsDep = Depends(),
 ) -> MessageResponse:
     from rag_agent.connectors.base import LocalFilesystemConnector
     from rag_agent.core.config import RAGSettings
@@ -86,7 +86,7 @@ async def list_connectors() -> list[dict]:
 
 @router.get("/api/v1/status")
 async def status_stream(
-    settings: SettingsDep = Depends(),
+    settings: SettingsDep,
 ) -> Any:
     from rag_agent.core.valkey import get_valkey
     from rag_agent.services.status_service import StatusService
