@@ -15,7 +15,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy application source, configuration, and frontend
-COPY pyproject.toml .
+COPY pyproject.toml README.md .
 COPY rag_agent/ rag_agent/
 COPY frontend/ frontend/
 COPY alembic.ini .
