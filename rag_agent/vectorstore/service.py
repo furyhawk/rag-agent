@@ -18,15 +18,12 @@ class VectorStoreService:
     async def ensure_collection(self, name: str) -> None:
         """Validate name and create collection if needed."""
         self._store.validate_collection_name(name)
-        # For Milvus, _ensure_collection is called internally by insert_document.
-        # This method just validates the name.
+        await self._store.ensure_collection(name)
 
     async def create_collection(self, name: str) -> None:
         """Create a new collection after validation."""
         self._store.validate_collection_name(name)
-        # Trigger collection creation by inserting a dummy and deleting,
-        # or by directly calling the underlying client.
-        # For Milvus, we rely on _ensure_collection being called during insert.
+        await self._store.ensure_collection(name)
 
     async def insert_document(
         self, collection_name: str, document: Document

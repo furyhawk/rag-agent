@@ -44,8 +44,8 @@ class MilvusVectorStore(BaseVectorStore):
             uri=milvus_uri, token=milvus_token or None
         )
 
-    async def _ensure_collection(self, name: str) -> None:
-        """Ensure collection exists with correct schema and index."""
+    async def ensure_collection(self, name: str) -> None:
+        """Create the collection if it does not already exist."""
         if not await self._client.has_collection(name):
             schema = self._client.create_schema(auto_id=False)
             schema.add_field(
@@ -84,7 +84,7 @@ class MilvusVectorStore(BaseVectorStore):
     async def insert_document(
         self, collection_name: str, document: Document
     ) -> None:
-        await self._ensure_collection(collection_name)
+        await self.ensure_collection(collection_name)
 
         if not document.chunks:
             raise ValueError("Document has no chunks.")
@@ -167,7 +167,7 @@ class MilvusVectorStore(BaseVectorStore):
     async def get_documents(
         self, collection_name: str
     ) -> list[DocumentInfo]:
-        await self._ensure_collection(collection_name)
+        await self.ensure_collection(collection_name)
         results: list[dict[str, Any]] = await self._client.query(
             collection_name=collection_name,
             filter="",

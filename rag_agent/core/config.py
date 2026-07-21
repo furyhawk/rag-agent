@@ -23,6 +23,7 @@ EMBEDDING_DIMENSIONS: dict[str, int] = {
     "gemini-embedding-exp-03-07": 3072,
     # SentenceTransformers (local)
     "all-MiniLM-L6-v2": 384,
+    "codefuse-ai/F2LLM-v2-80M": 320,
     "all-mpnet-base-v2": 768,
     "bge-small-en-v1.5": 384,
     "bge-base-en-v1.5": 768,

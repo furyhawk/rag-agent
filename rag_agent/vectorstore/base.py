@@ -19,6 +19,11 @@ class BaseVectorStore(ABC):
     """Abstract base class for vector store implementations."""
 
     @abstractmethod
+    async def ensure_collection(self, name: str) -> None:
+        """Create the collection if it does not already exist."""
+        ...
+
+    @abstractmethod
     async def insert_document(
         self, collection_name: str, document: Document
     ) -> None:
