@@ -152,7 +152,8 @@ dev-logs:
 	$(COMPOSE) logs -f --tail=100 $(DEV_COMPOSE_SERVICES)
 
 # Helper: load .env.dev as environment variables (bypasses pydantic-settings hardcoded path)
-DEV_ENV := env $$(grep -v '^\s*#' .env.dev | grep -v '^\s*$$' | xargs)
+# Note: [\#] avoids Make interpreting # as a comment character in the grep pattern.
+DEV_ENV := env $$(grep -v '^\s*[\#]' .env.dev | grep -v '^\s*$$' | xargs)
 
 dev-setup:
 	@echo "📁 Creating local media directory..."

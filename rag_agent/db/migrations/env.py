@@ -1,8 +1,14 @@
-"""Alembic migration environment."""
+"""Alembic migration environment.
+
+Allows runtime override of the database URL via the DATABASE_URL environment
+variable, so migrations work with both container (alembic.ini default) and
+dev-fast (env var from .env.dev) setups.
+"""
 
 from __future__ import annotations
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -15,6 +21,11 @@ from rag_agent.db.models import SyncLog, TrackedDocument  # noqa: F401 — ensur
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Allow DATABASE_URL env var to override alembic.ini (used by dev-fast workflow)
+db_url = os.environ.get("DATABASE_URL")
+if db_url:
+    config.set_main_option("sqlalchemy.url", db_url)
 
 target_metadata = Base.metadata
 

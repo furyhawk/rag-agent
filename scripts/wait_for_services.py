@@ -1,12 +1,13 @@
 """Wait for all backend services to be ready.
 
-Respects environment variables so it works with both container (docker-compose)
-and dev-fast (app-on-host) setups.  Override any service URL via env:
+Uses protocol-appropriate health checks for each service rather than
+raw HTTP (PostgreSQL and Valkey don't speak HTTP).  Respects environment
+variables for port configurability:
 
-  DATABASE_URL  → extracts Postgres host:port
-  VALKEY_URL    → extracts Valkey host:port
-  MILVUS_URI    → extracts Milvus host:port
-  API_URL       → API readiness endpoint (default http://localhost:8100/ready)
+  DATABASE_URL  → Postgres connection string (default: container port 5433)
+  VALKEY_URL    → Valkey connection string   (default: container port 6380)
+  MILVUS_URI    → Milvus gRPC URI            (default: port 19530)
+  API_URL       → API readiness endpoint     (default: http://localhost:8100/ready)
 """
 
 from __future__ import annotations
@@ -17,12 +18,100 @@ import time
 from urllib.parse import urlparse
 
 
-def _parse_host_port(url: str, default_port: int) -> str:
-    """Extract ``host:port`` from a connection URL, falling back to *default_port*."""
+def _parse_host_port(url: str, default_port: int) -> tuple[str, int]:
+    """Extract ``(host, port)`` from a connection URL."""
     parsed = urlparse(url)
     host = parsed.hostname or "localhost"
     port = parsed.port or default_port
-    return f"{host}:{port}"
+    return host, port
+
+
+def _check_postgres(database_url: str) -> bool:
+    """Check PostgreSQL readiness via asyncpg."""
+    try:
+        import asyncio
+        import asyncpg
+
+        host, port = _parse_host_port(database_url, 5433)
+
+        async def _try() -> bool:
+            try:
+                conn = await asyncpg.connect(
+                    host=host,
+                    port=port,
+                    user="rag",
+                    password="rag",
+                    database="rag",
+                    timeout=3.0,
+                )
+                await conn.close()
+                return True
+            except Exception:
+                return False
+
+        return asyncio.run(_try())
+    except ImportError:
+        return False
+
+
+def _check_valkey(valkey_url: str) -> bool:
+    """Check Valkey / Redis readiness via ping."""
+    try:
+        import redis.asyncio as redis
+        import asyncio
+
+        async def _try() -> bool:
+            try:
+                client = redis.from_url(valkey_url, decode_responses=True)
+                await client.ping()
+                await client.aclose()
+                return True
+            except Exception:
+                return False
+
+        return asyncio.run(_try())
+    except ImportError:
+        return False
+
+
+def _check_milvus(milvus_uri: str) -> bool:
+    """Check Milvus readiness by connecting to the gRPC port (19530).
+
+    Uses pymilvus to list collections — a lightweight operation that verifies
+    the server is alive.  Falls back to a simple TCP port check if pymilvus
+    is not available.
+    """
+    try:
+        from pymilvus import MilvusClient
+
+        client = MilvusClient(uri=milvus_uri)
+        client.list_collections()
+        client.close()
+        return True
+    except Exception:
+        pass
+
+    # Fallback: check if the TCP port is open
+    try:
+        import socket
+
+        host, port = _parse_host_port(milvus_uri, 19530)
+        sock = socket.create_connection((host, port), timeout=3.0)
+        sock.close()
+        return True
+    except Exception:
+        return False
+
+
+def _check_api(api_url: str) -> bool:
+    """Check API server readiness via its /ready endpoint."""
+    try:
+        import httpx
+
+        resp = httpx.get(api_url, timeout=3.0)
+        return resp.status_code == 200
+    except Exception:
+        return False
 
 
 def wait_for_services(timeout: int = 60) -> None:
@@ -31,8 +120,6 @@ def wait_for_services(timeout: int = 60) -> None:
     Args:
         timeout: Maximum wait time in seconds.
     """
-    import httpx
-
     # Read connection info from environment (set via .env / .env.dev)
     database_url = os.environ.get(
         "DATABASE_URL", "postgresql+asyncpg://rag:rag@localhost:5433/rag"
@@ -47,32 +134,26 @@ def wait_for_services(timeout: int = 60) -> None:
         "API_URL", "http://localhost:8100/ready"
     )
 
-    pg_host_port = _parse_host_port(database_url, 5433)
-    valkey_host_port = _parse_host_port(valkey_url, 6380)
-    milvus_host_port = _parse_host_port(milvus_uri, 19530)
-
-    services = [
-        (api_url, "API"),
-        (f"http://{pg_host_port}/", "PostgreSQL"),
-        (f"http://{valkey_host_port}/", "Valkey"),
-        (f"http://{milvus_host_port}/", "Milvus"),
+    checks: list[tuple[str, str, object]] = [
+        ("PostgreSQL", database_url, _check_postgres),
+        ("Valkey",     valkey_url,  _check_valkey),
+        ("Milvus",     milvus_uri,  _check_milvus),
+        ("API",        api_url,     _check_api),
     ]
 
     start = time.monotonic()
     while time.monotonic() - start < timeout:
-        ready = []
-        for url, name in services:
-            try:
-                response = httpx.get(url, timeout=2.0)
-                if response.status_code in (200, 503):
-                    ready.append(name)
-            except Exception:
-                pass
-        if len(ready) == len(services):
+        ready: list[str] = []
+        for name, url, check_fn in checks:
+            if check_fn(url):
+                ready.append(name)
+
+        if len(ready) == len(checks):
             print(f"All services ready: {', '.join(ready)}")
             return
+
         print(f"Waiting for services... ready: {', '.join(ready)}")
-        time.sleep(2)
+        time.sleep(3)
 
     print("Timeout waiting for services", file=sys.stderr)
     sys.exit(1)
