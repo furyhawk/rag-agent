@@ -56,23 +56,22 @@ dev server needed. Source lives in the `frontend/` directory.
 
 ## Quick Start
 
-### Using uv and Make
+Two workflows are available:
+
+### 🐳 Full Container Stack (production-like)
 
 ```bash
 # Install uv (https://github.com/astral-sh/uv)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone or create the project
-cd /home/user/projects/rag-agent
-
-# Install dependencies with uv
+# Install dependencies
 make setup
 
 # Create .env from example
 cp .env.example .env
 # Edit .env with your settings
 
-# Start the stack
+# Start everything (app + data infra in containers)
 make up
 
 # Wait for services to be ready
@@ -88,6 +87,38 @@ curl -X POST http://localhost:8100/api/v1/search \
   -d '{"query": "What is the revenue?", "limit": 5}'
 ```
 
+### ⚡ Dev-Fast (app on host, hot-reload)
+
+Run the Python code directly on your machine for instant feedback — only the
+data stores (Postgres, Valkey, Milvus) run in containers.
+
+```bash
+# Install uv (https://github.com/astral-sh/uv)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies
+make setup
+
+# Start ONLY data infrastructure containers
+make dev-up
+
+# Create media directory + run database migrations
+make dev-setup
+
+# (Terminal 1) Start API with hot-reload
+make dev-fast
+
+# (Terminal 2) Start background worker
+make dev-fast-worker
+
+# Open http://localhost:8100/ in your browser
+
+# When done, stop data containers
+make dev-down
+```
+
+Changes to Python files are picked up instantly — no Docker rebuilds needed.
+
 ### Manual uv Commands
 
 ```bash
@@ -97,7 +128,7 @@ uv sync --all-extras
 # Run tests
 uv run pytest tests/ -v
 
-# Start API server
+# Start API server (uses .env)
 uv run uvicorn rag_agent.app:create_app --reload --factory
 
 # Start ARQ worker
@@ -156,38 +187,29 @@ The project includes a comprehensive Makefile for common tasks:
 # Show available tasks
 make
 
-# Install dependencies
-make setup
+# ── Setup & Quality ──────────────────────────────────────────
+make setup          # Install Python dependencies
+make test           # Run test suite
+make lint           # Lint code (ruff)
+make format         # Format code (ruff format)
+make typecheck      # Type checking (mypy)
+make clean          # Clean build artifacts
 
-# Run tests
-make test
+# ── Container Stack (app + data in containers) ──────────────
+make up             # Start full stack
+make down           # Stop stack
+make logs           # Show service logs
+make ps             # Show running containers
 
-# Lint code
-make lint
-
-# Format code
-make format
-
-# Type checking
-make typecheck
-
-# Start Docker stack
-make up
-
-# Wait for services
-make wait
-
-# Start API server (outside Docker)
-make run
-
-# Start ARQ worker (outside Docker)
-make worker
-
-# Run database migrations
-make migrate
-
-# Clean build artifacts
-make clean
+# ── Dev-Fast (app on host, hot-reload) ──────────────────────
+make dev-up          # Start data infra only (Postgres, Valkey, Milvus)
+make dev-down        # Stop data infra containers
+make dev-logs        # Show data infra logs
+make dev-setup       # Create media dir + run migrations
+make dev-fast        # Run API with hot-reload (no container)
+make dev-fast-worker # Run ARQ worker directly (no container)
+make dev-migrate     # Run Alembic migrations
+make dev-create-tables # Create tables directly (no Alembic)
 ```
 
 ## Integration with pydantic-deepagents
@@ -206,9 +228,11 @@ results = await client.search("quarterly earnings")
 
 ## Requirements
 
-- **uv** (https://github.com/astral-sh/uv) - Modern Python package installer and resolver
-- **Docker** and **Docker Compose** - For running the stack
-- **Python 3.12+** - Runtime environment
+- **uv** (https://github.com/astral-sh/uv) — Modern Python package installer and resolver
+- **Python 3.12+** — Runtime environment
+- **Docker** and **Docker Compose** — For running data infrastructure (Postgres, Valkey, Milvus).
+  Required by both the full container stack *and* the dev-fast workflow. If you only run
+  unit tests, Docker is optional (tests use SQLite).
 
 ## License
 

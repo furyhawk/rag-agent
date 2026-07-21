@@ -39,6 +39,7 @@ chroma_db/
 *.db
 *.sqlite3
 milvus-data/
+.dev-media/
 
 # Testing
 .pytest_cache/
