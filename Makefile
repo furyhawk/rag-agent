@@ -44,6 +44,8 @@ help:
 	@echo "dev-fast-worker - Run worker directly with .env.dev"
 	@echo "dev-migrate   - Run Alembic migrations against local infra"
 	@echo "dev-create-tables - Create tables directly (no Alembic)"
+	@echo "dev-reset-docs - Clear all documents (dev env)"
+	@echo "dev-reset-docs-force - Clear all documents with CASCADE"
 	@echo "dev-setup     - Create media dir + run migrations"
 	@echo ""
 	@echo "── Build & Publish ──────────────────────────────────────────"
@@ -56,6 +58,8 @@ help:
 	@echo "run           - Start API server (outside Docker)"
 	@echo "migrate       - Run Alembic migrations"
 	@echo "wait          - Wait for services to be ready"
+	@echo "reset-docs    - Clear all documents from DB, Milvus, and queues"
+	@echo "reset-docs-force - Same + CASCADE truncation"
 	@echo "clean         - Clean build artifacts and __pycache__"
 	@echo ""
 	@echo "── Shell Access ─────────────────────────────────────────────"
@@ -132,7 +136,15 @@ wait:
 	@echo "⏳ Waiting for services to be ready..."
 	python scripts/wait_for_services.py
 
-.PHONY: run worker migrate wait
+reset-docs:
+	@echo "🗑️  Clearing all documents from DB, Milvus, and Valkey..."
+	uv run python scripts/reset_documents.py
+
+reset-docs-force:
+	@echo "🗑️  Force-clearing all documents (CASCADE truncation)..."
+	uv run python scripts/reset_documents.py --force
+
+.PHONY: run worker migrate wait reset-docs reset-docs-force
 
 # ── Dev-Fast (data infra in containers, app on host) ─────────────
 DEV_COMPOSE_SERVICES := postgres valkey milvus-etcd milvus-minio milvus
@@ -177,6 +189,14 @@ dev-create-tables:
 	@echo "🏗️  Creating database tables directly..."
 	$(DEV_ENV) uv run python scripts/create_tables.py
 
+dev-reset-docs:
+	@echo "🗑️  Clearing all documents from DB, Milvus, and Valkey (dev)..."
+	$(DEV_ENV) uv run python scripts/reset_documents.py
+
+dev-reset-docs-force:
+	@echo "🗑️  Force-clearing all documents (dev, CASCADE)..."
+	$(DEV_ENV) uv run python scripts/reset_documents.py --force
+
 dev-fast:
 	@echo "🚀 Starting API server (hot-reload, no container)..."
 	$(DEV_ENV) uv run uvicorn rag_agent.app:create_app \
@@ -189,7 +209,7 @@ dev-fast-worker:
 	@echo "⚡ Starting ARQ worker (no container)..."
 	$(DEV_ENV) uv run arq rag_agent.worker.settings.WorkerSettings
 
-.PHONY: dev-up dev-down dev-logs dev-setup dev-migrate dev-create-tables dev-fast dev-fast-worker
+.PHONY: dev-up dev-down dev-logs dev-setup dev-migrate dev-create-tables dev-reset-docs dev-reset-docs-force dev-fast dev-fast-worker
 
 # ── Shell Access ─────────────────────────────────────────────────
 shell:

@@ -466,6 +466,18 @@ th.sortable.sorting-desc {
   font-weight: 500;
   margin-top: 8px;
 }
+.upload-zone .upload-queue {
+  margin-top: 10px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.upload-zone .upload-filename {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 2px 0;
+  text-align: center;
+}
+
 
 /* Health cards */
 .health-grid {

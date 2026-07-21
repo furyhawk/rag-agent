@@ -265,11 +265,15 @@ const DocumentsPage = {
         @dragleave="dragOver = false"
         @drop.prevent="handleDrop">
         <div v-html="icons.upload"></div>
-        <div class="upload-text">{{ uploadFile ? uploadFile.name : 'Drop files here or click to upload' }}</div>
-        <div class="upload-hint" v-if="!uploadFile">PDF, DOCX, TXT, MD — max 50MB</div>
-        <div v-if="uploading" class="uploaded-filename">Uploading…</div>
+        <div class="upload-text" v-if="!uploading && uploadQueue.length === 0">Drop files here or click to upload</div>
+        <div class="upload-text" v-else-if="!uploading">{{ uploadQueue.length }} file(s) selected</div>
+        <div class="upload-text" v-else>Uploading {{ uploadProgress }} / {{ uploadQueue.length }}…</div>
+        <div class="upload-hint" v-if="!uploading && uploadQueue.length === 0">PDF, DOCX, TXT, MD — max 50MB each</div>
+        <div class="upload-queue" v-if="uploadQueue.length > 0 && !uploading">
+          <div v-for="(f, i) in uploadQueue" :key="i" class="upload-filename">{{ f.name }}</div>
+        </div>
       </div>
-      <input type="file" ref="fileInput" accept=".pdf,.docx,.txt,.md" style="display:none" @change="onFileSelected" />
+      <input type="file" ref="fileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" @change="onFileSelected" />
 
       <!-- Filter bar -->
       <div class="filter-bar">
@@ -389,8 +393,9 @@ const DocumentsPage = {
     const sortBy = ref('created_at');
     const sortOrder = ref('desc');
     const filters = reactive({ collection: '', status: '' });
-    const uploadFile = ref(null);
+    const uploadQueue = ref([]);
     const uploading = ref(false);
+    const uploadProgress = ref(0);
     const dragOver = ref(false);
     const fileInput = ref(null);
     const deleteTarget = ref(null);
@@ -450,27 +455,38 @@ const DocumentsPage = {
 
     function triggerUpload() { fileInput.value?.click(); }
     function onFileSelected(e) {
-      const file = e.target.files[0];
-      if (file) doUpload(file);
+      const files = Array.from(e.target.files || []);
+      if (files.length) startUpload(files);
       e.target.value = '';
     }
     function handleDrop(e) {
       dragOver.value = false;
-      const file = e.dataTransfer?.files[0];
-      if (file) doUpload(file);
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length) startUpload(files);
     }
-    async function doUpload(file) {
-      uploading.value = true;
-      uploadFile.value = file;
-      try {
-        const result = await api.uploadDocument(file);
-        addNotification(`"${file.name}" uploaded and queued`, 'success');
+    function startUpload(files) {
+      uploadQueue.value = files;
+      uploadProgress.value = 0;
+      uploadNext();
+    }
+    async function uploadNext() {
+      if (uploadProgress.value >= uploadQueue.value.length) {
+        uploading.value = false;
+        uploadQueue.value = [];
+        uploadProgress.value = 0;
         loadDocs(1);
-      } catch (e) {
-        addNotification(e.message, 'error');
+        return;
       }
-      uploading.value = false;
-      uploadFile.value = null;
+      uploading.value = true;
+      const file = uploadQueue.value[uploadProgress.value];
+      try {
+        await api.uploadDocument(file);
+        addNotification(`"${file.name}" uploaded and queued`, 'success');
+      } catch (e) {
+        addNotification(`"${file.name}": ${e.message}`, 'error');
+      }
+      uploadProgress.value++;
+      uploadNext();
     }
 
     function viewDoc(id) { navigate('document', id); }
@@ -496,7 +512,7 @@ const DocumentsPage = {
 
     onMounted(() => loadDocs(1));
 
-    return { docs, loading, page, totalPages, visiblePages, perPage, sortBy, sortOrder, filters, uploadFile, uploading, dragOver, fileInput, deleteTarget, deleting,
+    return { docs, loading, page, totalPages, visiblePages, perPage, sortBy, sortOrder, filters, uploadQueue, uploading, uploadProgress, dragOver, fileInput, deleteTarget, deleting,
       loadDocs, toggleSort, sortableCls, sortArrow, triggerUpload, onFileSelected, handleDrop, viewDoc, downloadDoc, retryDoc, confirmDelete, doDelete,
       fmtSize, fmtDate, store, icons: Icons, navigate };
   }
