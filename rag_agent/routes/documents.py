@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_agent.core.config import SettingsDep
@@ -128,8 +129,6 @@ async def download_document(
     doc_id: str,
     session: AsyncSession = Depends(open_session),
 ) -> FileResponse:
-    from fastapi.responses import FileResponse
-
     doc_service = DocumentService(session)
     doc = await doc_service.get_document(doc_id)
     if not doc:
