@@ -26,6 +26,7 @@ async def get_vector_store(settings: SettingsDep) -> BaseVectorStore:
         settings=settings.rag,
         api_key=settings.embedding_api_key,
         base_url=settings.embedding_base_url,
+        models_cache_dir=str(settings.models_cache_dir),
     )
     return MilvusVectorStore(
         milvus_uri=settings.milvus_uri,

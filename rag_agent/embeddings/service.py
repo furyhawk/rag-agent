@@ -7,6 +7,7 @@ import time
 from rag_agent.core.config import RAGSettings
 from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.base import BaseEmbeddingProvider
+from rag_agent.embeddings.local import LocalEmbeddingProvider
 from rag_agent.embeddings.openai_compat import OpenAIEmbeddingProvider
 from rag_agent.models.document import Document
 
@@ -29,16 +30,26 @@ class EmbeddingService:
         base_url: str | None = None,
         batch_size: int = 100,
         max_retries: int = 3,
+        models_cache_dir: str | None = None,
     ) -> None:
         config = settings.embeddings_config
         self.expected_dim = config.dim
         self.batch_size = batch_size
         self.max_retries = max_retries
-        self.provider: BaseEmbeddingProvider = OpenAIEmbeddingProvider(
-            model=config.model,
-            api_key=api_key,
-            base_url=base_url,
-        )
+
+        if base_url:
+            self.provider: BaseEmbeddingProvider = OpenAIEmbeddingProvider(
+                model=config.model,
+                api_key=api_key,
+                base_url=base_url,
+            )
+            logger.info("embedding.service.provider", provider="openai-compat", base_url=base_url)
+        else:
+            self.provider = LocalEmbeddingProvider(
+                model=config.model,
+                cache_dir=models_cache_dir,
+            )
+            logger.info("embedding.service.provider", provider="local", model=config.model)
 
     def _embed_with_retry(self, texts: list[str]) -> list[list[float]]:
         """Embed texts with retry and exponential backoff."""

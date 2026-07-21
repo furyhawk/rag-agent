@@ -47,6 +47,7 @@ class IngestionService:
         milvus_token: str,
         embedding_api_key: str | None = None,
         embedding_base_url: str | None = None,
+        models_cache_dir: str | None = None,
         on_event: Callable[..., Awaitable[None]] | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> IngestionService:
@@ -57,6 +58,7 @@ class IngestionService:
             settings=settings,
             api_key=embedding_api_key,
             base_url=embedding_base_url,
+            models_cache_dir=models_cache_dir,
         )
         vector_store = MilvusVectorStore(
             milvus_uri=milvus_uri,

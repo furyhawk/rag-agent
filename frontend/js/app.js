@@ -723,14 +723,14 @@ const SearchPage = {
           </select>
         </div>
         <div class="field" style="justify-content:flex-end">
-          <label class="toggle" @click.prevent>
+          <label class="toggle">
             <input type="checkbox" v-model="useReranker" />
             <span class="toggle-track"></span>
             Reranker
           </label>
         </div>
         <div class="field" style="justify-content:flex-end">
-          <label class="toggle" @click.prevent>
+          <label class="toggle">
             <input type="checkbox" v-model="multiCollection" />
             <span class="toggle-track"></span>
             Multi-collection

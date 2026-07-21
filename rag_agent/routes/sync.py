@@ -36,6 +36,7 @@ async def trigger_sync(
             settings.milvus_token,
             embedding_api_key=settings.embedding_api_key,
             embedding_base_url=settings.embedding_base_url,
+            models_cache_dir=str(settings.models_cache_dir),
         ),
         settings=RAGSettings(),
     )

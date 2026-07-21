@@ -80,6 +80,7 @@ async def process_document(
                 milvus_token=settings.milvus_token or "",
                 embedding_api_key=settings.embedding_api_key or "",
                 embedding_base_url=settings.embedding_base_url or "",
+                models_cache_dir=str(settings.models_cache_dir),
             )
 
             # Process the file

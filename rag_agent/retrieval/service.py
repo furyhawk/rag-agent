@@ -33,7 +33,7 @@ class RetrievalService:
         self._enable_hybrid = enable_hybrid_search
         self._use_reranker = use_reranker
         self._reranker = (
-            RerankService(CrossEncoderReranker(settings.cross_encoder_model))
+            RerankService(CrossEncoderReranker(settings.reranker_config.model))
             if use_reranker
             else None
         )
