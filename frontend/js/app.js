@@ -291,6 +291,14 @@ const DocumentsPage = {
           </select>
         </div>
         <div class="field">
+          <label>Per page</label>
+          <select class="select" v-model.number="perPage" @change="loadDocs(1)">
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+        </div>
+        <div class="field">
           <label>&nbsp;</label>
           <button class="btn btn-ghost" @click="loadDocs(1)" v-html="icons.refresh"></button>
         </div>
@@ -306,13 +314,27 @@ const DocumentsPage = {
         <table>
           <thead>
             <tr>
-              <th>Filename</th>
-              <th>Type</th>
-              <th>Size</th>
-              <th>Collection</th>
-              <th>Chunks</th>
-              <th>Status</th>
-              <th>Created</th>
+              <th class="sortable" :class="sortableCls('filename')" @click="toggleSort('filename')">
+                Filename <span class="sort-arrow" v-html="sortArrow('filename')"></span>
+              </th>
+              <th class="sortable" :class="sortableCls('filetype')" @click="toggleSort('filetype')">
+                Type <span class="sort-arrow" v-html="sortArrow('filetype')"></span>
+              </th>
+              <th class="sortable" :class="sortableCls('filesize')" @click="toggleSort('filesize')">
+                Size <span class="sort-arrow" v-html="sortArrow('filesize')"></span>
+              </th>
+              <th class="sortable" :class="sortableCls('collection_name')" @click="toggleSort('collection_name')">
+                Collection <span class="sort-arrow" v-html="sortArrow('collection_name')"></span>
+              </th>
+              <th class="sortable" :class="sortableCls('chunk_count')" @click="toggleSort('chunk_count')">
+                Chunks <span class="sort-arrow" v-html="sortArrow('chunk_count')"></span>
+              </th>
+              <th class="sortable" :class="sortableCls('status')" @click="toggleSort('status')">
+                Status <span class="sort-arrow" v-html="sortArrow('status')"></span>
+              </th>
+              <th class="sortable" :class="sortableCls('created_at')" @click="toggleSort('created_at')">
+                Created <span class="sort-arrow" v-html="sortArrow('created_at')"></span>
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -363,7 +385,9 @@ const DocumentsPage = {
     const loading = ref(true);
     const page = ref(1);
     const total = ref(0);
-    const perPage = 20;
+    const perPage = ref(20);
+    const sortBy = ref('created_at');
+    const sortOrder = ref('desc');
     const filters = reactive({ collection: '', status: '' });
     const uploadFile = ref(null);
     const uploading = ref(false);
@@ -372,7 +396,7 @@ const DocumentsPage = {
     const deleteTarget = ref(null);
     const deleting = ref(null);
 
-    const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage)));
+    const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)));
     const visiblePages = computed(() => {
       const p = page.value, tp = totalPages.value;
       if (tp <= 7) return Array.from({ length: tp }, (_, i) => i + 1);
@@ -385,11 +409,33 @@ const DocumentsPage = {
       return pages;
     });
 
+    function toggleSort(column) {
+      if (sortBy.value === column) {
+        sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+      } else {
+        sortBy.value = column;
+        sortOrder.value = 'asc';
+      }
+      loadDocs(1);
+    }
+
+    function sortableCls(column) {
+      return sortBy.value === column ? 'sorting-' + sortOrder.value : '';
+    }
+
+    function sortArrow(column) {
+      if (sortBy.value !== column) return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><path d="M8 3l4 4-4 4M16 21l-4-4 4-4"/></svg>';
+      if (sortOrder.value === 'asc') return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="18 15 12 9 6 15"/></svg>';
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><polyline points="6 9 12 15 18 9"/></svg>';
+    }
+
     async function loadDocs(p) {
       page.value = p;
       loading.value = true;
       try {
-        const params = { page: p, per_page: perPage };
+        const params = { page: p, per_page: perPage.value };
+        params.sort_by = sortBy.value;
+        params.sort_order = sortOrder.value;
         if (filters.collection) params.collection_name = filters.collection;
         if (filters.status) params.status = filters.status;
         const data = await api.listDocuments(params);
@@ -450,8 +496,8 @@ const DocumentsPage = {
 
     onMounted(() => loadDocs(1));
 
-    return { docs, loading, page, totalPages, visiblePages, filters, uploadFile, uploading, dragOver, fileInput, deleteTarget, deleting,
-      loadDocs, triggerUpload, onFileSelected, handleDrop, viewDoc, downloadDoc, retryDoc, confirmDelete, doDelete,
+    return { docs, loading, page, totalPages, visiblePages, perPage, sortBy, sortOrder, filters, uploadFile, uploading, dragOver, fileInput, deleteTarget, deleting,
+      loadDocs, toggleSort, sortableCls, sortArrow, triggerUpload, onFileSelected, handleDrop, viewDoc, downloadDoc, retryDoc, confirmDelete, doDelete,
       fmtSize, fmtDate, store, icons: Icons, navigate };
   }
 };

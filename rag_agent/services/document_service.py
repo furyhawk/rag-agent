@@ -79,12 +79,16 @@ class DocumentService:
         status: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> DocumentListResponse:
         docs = await self._repo.list_all(
             collection_name=collection_name,
             status=status,
             offset=(page - 1) * per_page,
             limit=per_page,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
         items = [
             DocumentItem(
@@ -102,7 +106,10 @@ class DocumentService:
             )
             for d in docs
         ]
-        total = len(items)
+        total = await self._repo.count(
+            collection_name=collection_name,
+            status=status,
+        )
         return DocumentListResponse(
             items=items, total=total, page=page, per_page=per_page
         )

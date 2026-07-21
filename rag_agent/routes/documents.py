@@ -77,6 +77,8 @@ async def list_documents(
     status: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
     session: AsyncSession = Depends(open_session),
 ) -> DocumentListResponse:
     doc_service = DocumentService(session)
@@ -85,6 +87,8 @@ async def list_documents(
         status=status,
         page=page,
         per_page=per_page,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
 

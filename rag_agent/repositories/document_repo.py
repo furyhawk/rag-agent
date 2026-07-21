@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_agent.db.models.document import TrackedDocument
@@ -34,6 +34,8 @@ class DocumentRepository:
         status: str | None = None,
         offset: int = 0,
         limit: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
     ) -> list[TrackedDocument]:
         query = select(TrackedDocument)
         if collection_name:
@@ -42,7 +44,22 @@ class DocumentRepository:
             )
         if status:
             query = query.where(TrackedDocument.status == status)
-        query = query.order_by(TrackedDocument.created_at.desc())
+
+        # Map allowed sort columns to model attributes
+        sort_map = {
+            "filename": TrackedDocument.filename,
+            "filetype": TrackedDocument.filetype,
+            "filesize": TrackedDocument.filesize,
+            "status": TrackedDocument.status,
+            "chunk_count": TrackedDocument.chunk_count,
+            "created_at": TrackedDocument.created_at,
+            "completed_at": TrackedDocument.completed_at,
+            "collection_name": TrackedDocument.collection_name,
+        }
+        col = sort_map.get(sort_by, TrackedDocument.created_at)
+        order_fn = desc if sort_order == "desc" else asc
+        query = query.order_by(order_fn(col))
+
         query = query.offset(offset).limit(limit)
         result = await self._session.execute(query)
         return list(result.scalars().all())
@@ -93,6 +110,23 @@ class DocumentRepository:
             )
         )
         return result.rowcount  # type: ignore[return-value]
+
+    async def count(
+        self,
+        collection_name: str | None = None,
+        status: str | None = None,
+    ) -> int:
+        from sqlalchemy import func
+
+        query = select(func.count(TrackedDocument.id))
+        if collection_name:
+            query = query.where(
+                TrackedDocument.collection_name == collection_name
+            )
+        if status:
+            query = query.where(TrackedDocument.status == status)
+        result = await self._session.execute(query)
+        return result.scalar_one()
 
     async def find_by_content_hash(
         self, collection_name: str, content_hash: str

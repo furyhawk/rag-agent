@@ -394,6 +394,32 @@ tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--bg-hover); }
 td.actions { white-space: nowrap; }
 
+/* Sortable column headers */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+th.sortable:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+th.sortable .sort-arrow {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+  opacity: 0.4;
+}
+th.sortable:hover .sort-arrow,
+th.sortable.sorting-asc .sort-arrow,
+th.sortable.sorting-desc .sort-arrow {
+  opacity: 1;
+}
+th.sortable.sorting-asc,
+th.sortable.sorting-desc {
+  color: var(--accent);
+}
+
 /* Pagination */
 .pagination {
   display: flex;
