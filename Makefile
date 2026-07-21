@@ -46,6 +46,11 @@ help:
 	@echo "dev-create-tables - Create tables directly (no Alembic)"
 	@echo "dev-setup     - Create media dir + run migrations"
 	@echo ""
+	@echo "── Build & Publish ──────────────────────────────────────────"
+	@echo "build         - Build Python package (wheel + sdist)"
+	@echo "publish       - Build + publish to PyPI"
+	@echo "publish-docker - Build Docker image with version tag"
+	@echo ""
 	@echo "── Local Commands ───────────────────────────────────────────"
 	@echo "worker        - Start ARQ worker (outside Docker)"
 	@echo "run           - Start API server (outside Docker)"
@@ -205,13 +210,29 @@ milvus-cli:
 
 .PHONY: shell db-shell valkey-cli milvus-cli
 
+# ── Build & Publish ───────────────────────────────────────────────
+build:
+	@echo "📦 Building Python package (wheel + sdist)..."
+	rm -rf dist/ && uv build
+
+publish: build
+	@echo "🚀 Publishing to PyPI..."
+	uv publish
+
+publish-docker:
+	@echo "🐳 Building and publishing Docker image..."
+	$(CONTAINER_RUNTIME) build -t verity-rag:latest .
+	$(CONTAINER_RUNTIME) tag verity-rag:latest verity-rag:$(shell date +%Y%m%d-%H%M%S)
+
+.PHONY: build publish publish-docker
+
 # ── Clean ────────────────────────────────────────────────────────
 clean:
 	@echo "🧹 Cleaning build artifacts..."
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type f -name "*.log" -delete
-	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache
+	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache dist/
 
 .PHONY: clean
 
