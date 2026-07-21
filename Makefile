@@ -151,9 +151,10 @@ dev-logs:
 	@echo "📋 Showing data infra logs..."
 	$(COMPOSE) logs -f --tail=100 $(DEV_COMPOSE_SERVICES)
 
-# Helper: load .env.dev as environment variables (bypasses pydantic-settings hardcoded path)
-# Note: [\#] avoids Make interpreting # as a comment character in the grep pattern.
-DEV_ENV := env $$(grep -v '^\s*[\#]' .env.dev | grep -v '^\s*$$' | xargs)
+# Helper: source .env.dev directly so variables are set in the current shell.
+# This avoids glob-expansion issues with values like CORS_ORIGINS=["*"].
+# (set -a ensures all sourced variables are exported to the environment)
+DEV_ENV := set -a; . .env.dev; set +a;
 
 dev-setup:
 	@echo "📁 Creating local media directory..."
