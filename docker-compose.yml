@@ -89,7 +89,8 @@ services:
 
   # ── PostgreSQL ──────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    # Use Debian variant to avoid initdb locale warnings in alpine/musl image.
+    image: postgres:16
     container_name: rag-agent-postgres
     ports:
       - "5433:5432"

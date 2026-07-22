@@ -119,6 +119,9 @@ make dev-down
 
 Changes to Python files are picked up instantly — no Docker rebuilds needed.
 
+`make dev-fast` and `make dev-fast-worker` now depend on `make dev-setup`,
+so DB migrations are always applied before either process starts.
+
 ### Manual uv Commands
 
 ```bash

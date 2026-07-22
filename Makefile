@@ -177,7 +177,7 @@ dev-setup:
 	@echo "📁 Creating local media directory..."
 	@mkdir -p .dev-media
 	@echo "🔄 Running database migrations..."
-	-$(DEV_ENV) uv run alembic upgrade head
+	$(DEV_ENV) uv run alembic upgrade head
 	@echo "✅ Dev environment ready!"
 
 dev-migrate:
@@ -197,7 +197,7 @@ dev-reset-docs-force:
 	@echo "🗑️  Force-clearing all documents (dev, CASCADE)..."
 	$(DEV_ENV) uv run python scripts/reset_documents.py --force
 
-dev-fast:
+dev-fast: dev-setup
 	@echo "🚀 Starting API server (hot-reload, no container)..."
 	$(DEV_ENV) uv run uvicorn rag_agent.app:create_app \
 		--reload \
@@ -205,7 +205,7 @@ dev-fast:
 		--host 0.0.0.0 \
 		--port 8100
 
-dev-fast-worker:
+dev-fast-worker: dev-setup
 	@echo "⚡ Starting ARQ worker (no container)..."
 	$(DEV_ENV) uv run arq rag_agent.worker.settings.WorkerSettings
 
