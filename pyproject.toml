@@ -8,7 +8,7 @@ include = ["frontend/**"]
 
 [project]
 name = "verity-rag"
-version = "0.1.1"
+version = "0.1.2"
 description = "Production-grade self-hosted document ingestion and retrieval service"
 authors = [{ name = "furyhawk" }]
 license = { text = "MIT" }
