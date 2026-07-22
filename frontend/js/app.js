@@ -40,6 +40,7 @@ function truncate(str, len = 120) {
 const store = reactive({
   page: 'dashboard',
   documentId: null,           // for detail view
+  collectionFilter: null,     // collection filter for documents page
   notifications: [],
   health: null,
   collections: [],
@@ -55,10 +56,16 @@ function addNotification(msg, type = 'success') {
   }, 4000);
 }
 
-function navigate(page, documentId = null) {
+function navigate(page, documentId = null, params = {}) {
   store.page = page;
   store.documentId = documentId;
-  const hash = page + (documentId ? `/${documentId}` : '');
+  store.collectionFilter = page === 'documents' ? (params.collection || null) : null;
+  let hash = page;
+  if (documentId) {
+    hash += `/${documentId}`;
+  } else if (page === 'documents' && params.collection) {
+    hash += `/collection:${encodeURIComponent(params.collection)}`;
+  }
   history.pushState(null, '', `#${hash}`);
 }
 
@@ -68,6 +75,12 @@ function routeFromHash() {
   const parts = hash.split('/');
   store.page = parts[0];
   store.documentId = parts[1] || null;
+  // Parse collection filter from documents/collection:<name> hash
+  if (store.page === 'documents' && parts[1]?.startsWith('collection:')) {
+    store.collectionFilter = decodeURIComponent(parts[1].slice('collection:'.length));
+  } else if (store.page !== 'documents') {
+    store.collectionFilter = null;
+  }
 }
 window.addEventListener('hashchange', routeFromHash);
 routeFromHash();
@@ -258,19 +271,31 @@ const DocumentsPage = {
   template: `
     <div>
       <!-- Upload zone -->
-      <div class="upload-zone"
-        :class="{ dragover: dragOver }"
-        @click="triggerUpload"
-        @dragover.prevent="dragOver = true"
-        @dragleave="dragOver = false"
-        @drop.prevent="handleDrop">
-        <div v-html="icons.upload"></div>
-        <div class="upload-text" v-if="!uploading && uploadQueue.length === 0">Drop files here or click to upload</div>
-        <div class="upload-text" v-else-if="!uploading">{{ uploadQueue.length }} file(s) selected</div>
-        <div class="upload-text" v-else>Uploading {{ uploadProgress }} / {{ uploadQueue.length }}…</div>
-        <div class="upload-hint" v-if="!uploading && uploadQueue.length === 0">PDF, DOCX, TXT, MD — max 50MB each</div>
-        <div class="upload-queue" v-if="uploadQueue.length > 0 && !uploading">
-          <div v-for="(f, i) in uploadQueue" :key="i" class="upload-filename">{{ f.name }}</div>
+      <div class="card mb-4">
+        <div class="card-header">
+          <span class="card-title">Upload Documents</span>
+        </div>
+        <div class="field mt-2" style="padding:0 16px">
+          <label>Upload to collection</label>
+          <select class="select" v-model="uploadCollection" style="max-width:300px">
+            <option value="">Default (documents)</option>
+            <option v-for="c in store.collections" :key="c.name" :value="c.name">{{ c.name }}</option>
+          </select>
+        </div>
+        <div class="upload-zone"
+          :class="{ dragover: dragOver }"
+          @click="triggerUpload"
+          @dragover.prevent="dragOver = true"
+          @dragleave="dragOver = false"
+          @drop.prevent="handleDrop">
+          <div v-html="icons.upload"></div>
+          <div class="upload-text" v-if="!uploading && uploadQueue.length === 0">Drop files here or click to upload</div>
+          <div class="upload-text" v-else-if="!uploading">{{ uploadQueue.length }} file(s) selected</div>
+          <div class="upload-text" v-else>Uploading {{ uploadProgress }} / {{ uploadQueue.length }}…</div>
+          <div class="upload-hint" v-if="!uploading && uploadQueue.length === 0">PDF, DOCX, TXT, MD — max 50MB each</div>
+          <div class="upload-queue" v-if="uploadQueue.length > 0 && !uploading">
+            <div v-for="(f, i) in uploadQueue" :key="i" class="upload-filename">{{ f.name }}</div>
+          </div>
         </div>
       </div>
       <input type="file" ref="fileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" @change="onFileSelected" />
@@ -396,6 +421,7 @@ const DocumentsPage = {
     const uploadQueue = ref([]);
     const uploading = ref(false);
     const uploadProgress = ref(0);
+    const uploadCollection = ref('');
     const dragOver = ref(false);
     const fileInput = ref(null);
     const deleteTarget = ref(null);
@@ -479,9 +505,10 @@ const DocumentsPage = {
       }
       uploading.value = true;
       const file = uploadQueue.value[uploadProgress.value];
+      const targetCollection = uploadCollection.value || 'documents';
       try {
-        await api.uploadDocument(file);
-        addNotification(`"${file.name}" uploaded and queued`, 'success');
+        await api.uploadDocument(file, targetCollection);
+        addNotification(`"${file.name}" uploaded and queued to "${targetCollection}"`, 'success');
       } catch (e) {
         addNotification(`"${file.name}": ${e.message}`, 'error');
       }
@@ -510,9 +537,16 @@ const DocumentsPage = {
       } catch (e) { addNotification(e.message, 'error'); }
     }
 
-    onMounted(() => loadDocs(1));
+    onMounted(() => {
+      // Pick up collection filter from store (set by Collections "View docs")
+      if (store.collectionFilter) {
+        filters.collection = store.collectionFilter;
+        store.collectionFilter = null;
+      }
+      loadDocs(1);
+    });
 
-    return { docs, loading, page, totalPages, visiblePages, perPage, sortBy, sortOrder, filters, uploadQueue, uploading, uploadProgress, dragOver, fileInput, deleteTarget, deleting,
+    return { docs, loading, page, totalPages, visiblePages, perPage, sortBy, sortOrder, filters, uploadQueue, uploading, uploadProgress, uploadCollection, dragOver, fileInput, deleteTarget, deleting,
       loadDocs, toggleSort, sortableCls, sortArrow, triggerUpload, onFileSelected, handleDrop, viewDoc, downloadDoc, retryDoc, confirmDelete, doDelete,
       fmtSize, fmtDate, store, icons: Icons, navigate };
   }
@@ -695,13 +729,7 @@ const CollectionsPage = {
     }
 
     function viewCollection(name) {
-      // Navigate to documents filtered by this collection
-      store.page = 'documents';
-      // Set a session-level filter — we handle this via a URL param
-      navigate('documents');
-      // We'll re-trigger with a custom event approach: set filter in store
-      // Actually let's just navigate to documents — the user can select from the dropdown
-      addNotification(`Showing collection "${name}" — select it from the filter dropdown`, 'success');
+      navigate('documents', null, { collection: name });
     }
 
     return { newName, creating, dropTarget, store, createCol, confirmDrop, doDrop, viewCollection, icons: Icons };
