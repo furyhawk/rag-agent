@@ -124,7 +124,7 @@ services:
 
   # ── Milvus Vector Database ──────────────────────────────────────
   milvus-etcd:
-    image: quay.io/coreos/etcd:v3.5.18
+    image: quay.io/coreos/etcd:v3.5.33
     container_name: rag-agent-etcd
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
@@ -152,7 +152,7 @@ services:
     restart: unless-stopped
 
   milvus:
-    image: milvusdb/milvus:v2.5.4
+    image: milvusdb/milvus:v2.6.21
     container_name: rag-agent-milvus
     ports:
       - "19530:19530"
