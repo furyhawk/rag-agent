@@ -58,14 +58,21 @@ dev server needed. Source lives in the `frontend/` directory.
 
 Two workflows are available:
 
+Optional local-ml container override is also available when you need local
+Sentence Transformers models inside containers. By default, it enables
+local-ml for the worker only (api stays lean).
+
 ### 🐳 Full Container Stack (production-like)
 
 ```bash
 # Install uv (https://github.com/astral-sh/uv)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install dependencies
+# Install dependencies (lean profile)
 make setup
+
+# Optional: install local embedding/reranker ML deps
+make setup-local-ml
 
 # Create .env from example
 cp .env.example .env
@@ -73,6 +80,12 @@ cp .env.example .env
 
 # Start everything (app + data infra in containers)
 make up
+
+# Optional: start stack with local-ml enabled for worker only (api stays lean)
+make up-local-ml
+
+# Optional: enable local-ml for both api and worker (larger image footprint)
+make up-local-ml-full
 
 # Wait for services to be ready
 make wait
@@ -96,8 +109,11 @@ data stores (Postgres, Valkey, Milvus) run in containers.
 # Install uv (https://github.com/astral-sh/uv)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install dependencies
+# Install dependencies (lean profile)
 make setup
+
+# Optional: install local embedding/reranker ML deps
+make setup-local-ml
 
 # Start ONLY data infrastructure containers
 make dev-up
@@ -126,7 +142,10 @@ so DB migrations are always applied before either process starts.
 
 ```bash
 # Install dependencies
-uv sync --all-extras
+uv sync --extra dev
+
+# Optional local embedding/reranker dependencies
+uv sync --extra dev --extra local-ml
 
 # Run tests
 uv run pytest tests/ -v
@@ -192,6 +211,7 @@ make
 
 # ── Setup & Quality ──────────────────────────────────────────
 make setup          # Install Python dependencies
+make setup-local-ml # Install optional local embedding/reranker ML deps
 make test           # Run test suite
 make lint           # Lint code (ruff)
 make format         # Format code (ruff format)
@@ -200,9 +220,14 @@ make clean          # Clean build artifacts
 
 # ── Container Stack (app + data in containers) ──────────────
 make up             # Start full stack
+make up-local-ml    # Start stack with worker local-ml only (api lean)
+make up-local-ml-full # Start stack with local-ml for both api and worker
 make down           # Stop stack
+make down-local-ml  # Stop stack launched with local-ml override
 make logs           # Show service logs
+make logs-local-ml  # Show service logs with local-ml override
 make ps             # Show running containers
+make ps-local-ml    # Show containers with local-ml override
 
 # ── Dev-Fast (app on host, hot-reload) ──────────────────────
 make dev-up          # Start data infra only (Postgres, Valkey, Milvus)

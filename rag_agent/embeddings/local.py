@@ -6,12 +6,16 @@ Used when EMBEDDING_BASE_URL is empty (no remote endpoint configured).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.base import BaseEmbeddingProvider
 from rag_agent.models.document import Document
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 logger = get_logger(__name__)
 
@@ -21,12 +25,19 @@ class LocalEmbeddingProvider(BaseEmbeddingProvider):
 
     def __init__(self, model: str, cache_dir: str | None = None) -> None:
         self.model_name = model
-        self._model: SentenceTransformer | None = None
+        self._model: Any | None = None
         self.cache_dir = cache_dir
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self) -> Any:
         if self._model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    "Local embeddings require sentence-transformers. "
+                    "Install with: pip install 'verity-rag[local-ml]'"
+                ) from exc
             logger.info(
                 "embedding.local.load",
                 model=self.model_name,

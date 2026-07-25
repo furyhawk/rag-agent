@@ -25,6 +25,7 @@ help:
 	@echo "RAG Agent Development Tasks"
 	@echo "──────────────────────────────────────────────────────────────"
 	@echo "setup         - Install Python dependencies with uv"
+	@echo "setup-local-ml - Install optional local embedding/reranker ML deps"
 	@echo "test          - Run test suite"
 	@echo "lint          - Run linters (ruff)"
 	@echo "format        - Format code (ruff format)"
@@ -32,9 +33,14 @@ help:
 	@echo ""
 	@echo "── Container Stack ───────────────────────────────────────────"
 	@echo "up            - Start full container stack"
+	@echo "up-local-ml   - Start stack with worker local-ml only (api lean)"
+	@echo "up-local-ml-full - Start stack with local-ml for both api and worker"
 	@echo "down          - Stop container stack"
+	@echo "down-local-ml - Stop stack launched with local-ml override"
 	@echo "logs          - Show service logs"
+	@echo "logs-local-ml - Show logs for stack launched with local-ml override"
 	@echo "ps            - Show running containers"
+	@echo "ps-local-ml   - Show containers for stack launched with local-ml override"
 	@echo ""
 	@echo "── Dev-Fast (no app containers) ─────────────────────────────"
 	@echo "dev-up        - Start ONLY data infra (Postgres, Valkey, Milvus)"
@@ -73,9 +79,13 @@ help:
 # ── Python Dependencies ──────────────────────────────────────────
 setup:
 	@echo "📦 Installing Python dependencies with uv..."
-	uv sync --all-extras
+	uv sync --extra dev
 
-.PHONY: setup
+setup-local-ml:
+	@echo "🧠 Installing optional local ML dependencies..."
+	uv sync --extra dev --extra local-ml
+
+.PHONY: setup setup-local-ml
 
 # ── Testing ──────────────────────────────────────────────────────
 test:
@@ -104,19 +114,41 @@ up:
 	@echo "🐳 Starting container stack with $(CONTAINER_RUNTIME)..."
 	$(COMPOSE) up -d
 
+up-local-ml:
+	@echo "🐳 Starting stack with worker local-ml only (api lean)..."
+	LOCAL_ML_API=false LOCAL_ML_WORKER=true COMPOSE_PARALLEL_LIMIT=1 \
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml up -d --build
+
+up-local-ml-full:
+	@echo "🐳 Starting stack with local-ml for api and worker..."
+	LOCAL_ML_API=true LOCAL_ML_WORKER=true COMPOSE_PARALLEL_LIMIT=1 \
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml up -d --build
+
 down:
 	@echo "⏹️  Stopping container stack..."
 	$(COMPOSE) down
+
+down-local-ml:
+	@echo "⏹️  Stopping local-ml override container stack..."
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml down
 
 logs:
 	@echo "📋 Showing service logs..."
 	$(COMPOSE) logs -f --tail=100
 
+logs-local-ml:
+	@echo "📋 Showing local-ml override service logs..."
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml logs -f --tail=100
+
 ps:
 	@echo "📋 Showing running containers..."
 	$(COMPOSE) ps
 
-.PHONY: up down logs ps
+ps-local-ml:
+	@echo "📋 Showing running containers (local-ml override)..."
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml ps
+
+.PHONY: up up-local-ml up-local-ml-full down down-local-ml logs logs-local-ml ps ps-local-ml
 
 # ── Development ──────────────────────────────────────────────────
 run:

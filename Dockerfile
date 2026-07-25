@@ -1,6 +1,8 @@
 # ── RAG Agent — API & Worker ──────────────────────────────────────
 FROM python:3.12-slim AS base
 
+ARG INSTALL_LOCAL_ML=false
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
@@ -20,9 +22,13 @@ COPY rag_agent/ rag_agent/
 COPY frontend/ frontend/
 COPY alembic.ini .
 
-# Install Python dependencies (requires source for hatchling wheel build)
+# Install Python dependencies. local-ml extras are opt-in via build arg.
 RUN pip install --upgrade pip && \
-    pip install .
+    if [ "$INSTALL_LOCAL_ML" = "true" ]; then \
+        pip install '.[local-ml]'; \
+    else \
+        pip install .; \
+    fi
 
 # Create media directory
 RUN mkdir -p /data/media

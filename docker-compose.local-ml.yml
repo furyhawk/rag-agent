@@ -1,0 +1,22 @@
+# Optional override: enable heavy local ML dependencies (sentence-transformers/torch)
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local-ml.yml up -d --build
+#   podman compose -f docker-compose.yml -f docker-compose.local-ml.yml up -d --build
+#
+# Defaults in this override:
+#   - worker local-ml ON  (LOCAL_ML_WORKER=true)
+#   - api local-ml OFF    (LOCAL_ML_API=false)
+#
+# To enable local-ml in api too:
+#   LOCAL_ML_API=true docker compose -f docker-compose.yml -f docker-compose.local-ml.yml up -d --build
+
+services:
+  api:
+    build:
+      args:
+        INSTALL_LOCAL_ML: "${LOCAL_ML_API:-false}"
+
+  worker:
+    build:
+      args:
+        INSTALL_LOCAL_ML: "${LOCAL_ML_WORKER:-true}"
