@@ -60,4 +60,8 @@ dev = [
 ]
 local-ml = [
     "sentence-transformers>=3.3",
+    "transformers>=4.57",
+    "torch>=2.5",
+    "Pillow>=10.0",
+    "peft>=0.14",
 ]

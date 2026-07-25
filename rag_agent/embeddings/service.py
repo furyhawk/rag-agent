@@ -8,6 +8,7 @@ from rag_agent.core.config import RAGSettings
 from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.base import BaseEmbeddingProvider
 from rag_agent.embeddings.local import LocalEmbeddingProvider
+from rag_agent.embeddings.local_omni import LocalOmniEmbeddingProvider
 from rag_agent.embeddings.openai_compat import OpenAIEmbeddingProvider
 from rag_agent.models.document import Document
 
@@ -44,6 +45,12 @@ class EmbeddingService:
                 base_url=base_url,
             )
             logger.info("embedding.service.provider", provider="openai-compat", base_url=base_url)
+        elif "omni" in config.model.lower():
+            self.provider = LocalOmniEmbeddingProvider(
+                model=config.model,
+                cache_dir=models_cache_dir,
+            )
+            logger.info("embedding.service.provider", provider="local-omni", model=config.model)
         else:
             self.provider = LocalEmbeddingProvider(
                 model=config.model,

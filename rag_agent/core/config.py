@@ -28,6 +28,9 @@ EMBEDDING_DIMENSIONS: dict[str, int] = {
     "bge-small-en-v1.5": 384,
     "bge-base-en-v1.5": 768,
     "bge-large-en-v1.5": 1024,
+    # Jina AI Omni (text + image + video + audio)
+    "jinaai/jina-embeddings-v5-omni-nano": 768,
+    "jinaai/jina-embeddings-v5-omni-small": 1024,
 }
 
 

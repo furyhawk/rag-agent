@@ -26,6 +26,7 @@ help:
 	@echo "──────────────────────────────────────────────────────────────"
 	@echo "setup         - Install Python dependencies with uv"
 	@echo "setup-local-ml - Install optional local embedding/reranker ML deps"
+	@echo "setup-local-omni - Install local omni embedding deps (jina v5 omni)"
 	@echo "test          - Run test suite"
 	@echo "lint          - Run linters (ruff)"
 	@echo "format        - Format code (ruff format)"
@@ -85,7 +86,11 @@ setup-local-ml:
 	@echo "🧠 Installing optional local ML dependencies..."
 	uv sync --extra dev --extra local-ml
 
-.PHONY: setup setup-local-ml
+setup-local-omni:
+	@echo "🧠 Installing local omni embedding deps (jina-embeddings-v5-omni)..."
+	uv sync --extra dev --extra local-ml
+
+.PHONY: setup setup-local-ml setup-local-omni
 
 # ── Testing ──────────────────────────────────────────────────────
 test:
