@@ -124,6 +124,7 @@ class MilvusVectorStore(BaseVectorStore):
         limit: int = 4,
         filter: str = "",
     ) -> list[SearchResult]:
+        await self.ensure_collection(collection_name)
         query_vector = self._embedder.embed_query(query)
         results = await self._client.search(
             collection_name=collection_name,
