@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -117,15 +118,35 @@ async def process_document(
                 "message": result.message,
             }
 
-        except Exception as e:
-            logger.exception("Unexpected error processing document %s: %s", doc_id, e)
-            # Try to update status to error
+        except (Exception, asyncio.CancelledError) as e:
+            # Catch asyncio.CancelledError (raised by ARQ on job timeout) so the
+            # document status is always recorded instead of getting stuck in "processing".
+            is_timeout = isinstance(e, (TimeoutError, asyncio.CancelledError))
+            if is_timeout:
+                logger.error(
+                    "Document %s timed out after %ds: %s",
+                    doc_id, settings.worker_job_timeout, filename,
+                )
+            else:
+                logger.exception("Unexpected error processing document %s: %s", doc_id, e)
+            # Try to update status to error (use a fresh session in case the
+            # current one was left in a bad state by the cancellation).
             try:
-                doc = await session.get(TrackedDocument, doc_id)
-                if doc:
-                    doc.status = "error"
-                    doc.error_message = str(e)
-                    await session.commit()
+                err_engine = create_async_engine(settings.database_url)
+                err_session = sessionmaker(
+                    err_engine, class_=AsyncSession, expire_on_commit=False
+                )
+                async with err_session() as es:
+                    doc = await es.get(TrackedDocument, doc_id)
+                    if doc:
+                        doc.status = "error"
+                        doc.error_message = (
+                            f"Timeout after {settings.worker_job_timeout}s"
+                            if is_timeout
+                            else str(e)
+                        )
+                        await es.commit()
+                await err_engine.dispose()
             except Exception:
                 pass
             return {"status": "error", "message": str(e)}
@@ -151,6 +172,6 @@ class WorkerSettings:
     functions: list = [_noop_job, process_document]
     redis_settings: RedisSettings | None = _get_redis_settings()
     max_jobs: int = 4
-    job_timeout: int = 600  # 10 minutes per job
+    job_timeout: int = settings.worker_job_timeout
     retry_jobs: bool = True
     max_tries: int = 3

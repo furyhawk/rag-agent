@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     hf_token: str = ""
     models_cache_dir: Path = Path.home() / ".cache" / "rag-agent" / "models"
 
+    # ── Worker ───────────────────────────────────────────────────
+    worker_job_timeout: int = 3600  # seconds per ARQ job (Milvus flush can be slow)
+
     # ── Server ───────────────────────────────────────────────────
     host: str = "0.0.0.0"
     port: int = 8100
