@@ -152,8 +152,22 @@ class DocumentService:
             doc.id, status="queued", error_message=None
         )
         await self._repo.increment_retry_count(doc.id)
+
+        # Enqueue a new ARQ job so the document actually gets processed
+        from rag_agent.core.config import get_settings
+
+        settings = get_settings()
+        dispatcher = TaskDispatcher(settings.valkey_url)
+        await dispatcher.enqueue(
+            "process_document",
+            doc_id=str(doc.id),
+            collection_name=doc.collection_name,
+            storage_path=doc.storage_path,
+            filename=doc.filename,
+        )
+
         return RetryResponse(
-            id=str(doc.id), status="queued", message="Document re-queued"
+            id=str(doc.id), status="queued", message="Document re-queued for processing"
         )
 
     async def complete_ingestion(

@@ -374,7 +374,7 @@ const DocumentsPage = {
               <td>{{ fmtSize(doc.filesize) }}</td>
               <td><span class="text-secondary">{{ doc.collection_name }}</span></td>
               <td>{{ doc.chunk_count }}</td>
-              <td><status-badge :status="doc.status" /></td>
+              <td><status-badge :status="doc.status" :error-message="doc.error_message" /></td>
               <td class="text-muted">{{ fmtDate(doc.created_at) }}</td>
               <td class="actions">
                 <button class="btn btn-icon btn-ghost btn-sm" title="Download" @click="downloadDoc(doc.id)" v-html="icons.download"></button>
@@ -578,7 +578,7 @@ const DocumentDetailPage = {
           </div>
           <div class="detail-grid">
             <div><span class="detail-label">Collection</span><div class="detail-value">{{ doc.collection_name }}</div></div>
-            <div><span class="detail-label">Status</span><div><status-badge :status="doc.status" /></div></div>
+            <div><span class="detail-label">Status</span><div><status-badge :status="doc.status" :error-message="doc.error_message" /></div></div>
             <div><span class="detail-label">File Type</span><div class="detail-value">{{ doc.filetype?.toUpperCase() }}</div></div>
             <div><span class="detail-label">File Size</span><div class="detail-value">{{ fmtSize(doc.filesize) }}</div></div>
             <div><span class="detail-label">Chunks</span><div class="detail-value">{{ doc.chunk_count }}</div></div>
@@ -871,8 +871,11 @@ const SearchPage = {
    Shared components
    ═══════════════════════════════════════════════════════════════ */
 const StatusBadge = {
-  props: ['status'],
-  template: `<span class="badge" :class="'badge-' + cls">{{ label }}</span>`,
+  props: {
+    status: String,
+    errorMessage: { type: String, default: null },
+  },
+  template: `<span class="badge" :class="'badge-' + cls" :title="errorMessage || ''">{{ label }}</span>`,
   computed: {
     cls() {
       const m = { done: 'done', completed: 'done', error: 'error', failed: 'error', processing: 'processing', queued: 'queued', running: 'running', cancelled: 'cancelled' };
