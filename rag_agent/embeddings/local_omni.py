@@ -93,13 +93,28 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
 
     # ── Embedding API ────────────────────────────────────────────
 
+    @staticmethod
+    def _force_text_input(text: str) -> str:
+        """Normalize URL-like strings so the omni model treats them as plain text.
+
+        The upstream model inspects string inputs and may treat URL-prefixed
+        strings as media sources (image/video/audio/pdf). Some document chunks
+        begin with citation links and newline content, which can trigger URL
+        parsing errors. Prefixing these inputs keeps them on the text path.
+        """
+        stripped = text.lstrip()
+        if stripped.startswith(("http://", "https://", "file://", "data:")):
+            return f"Text: {text}"
+        return text
+
     def embed_queries(self, texts: list[str]) -> list[list[float]]:
         """Embed a list of query texts with the ``Query:`` prefix.
 
         Batches text-only encoding for efficiency.
         """
+        normalized_texts = [self._force_text_input(t) for t in texts]
         embeddings = self.model.encode(
-            texts,
+            normalized_texts,
             prompt_name="query",
             show_progress_bar=False,
         )
@@ -127,17 +142,18 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
 
         vectors: list[list[float]] = []
         for chunk in chunks:
+            chunk_text = self._force_text_input(chunk.chunk_content)
             if chunk.images:
                 pil_images = self._load_images(chunk.images)
                 if pil_images:
                     # Fused multimodal embedding: text + first image
                     emb = self.model.encode_document(
-                        (chunk.chunk_content, pil_images[0])
+                        (chunk_text, pil_images[0])
                     )
                 else:
-                    emb = self.model.encode_document(chunk.chunk_content)
+                    emb = self.model.encode_document(chunk_text)
             else:
-                emb = self.model.encode_document(chunk.chunk_content)
+                emb = self.model.encode_document(chunk_text)
 
             vectors.append(
                 emb.tolist()

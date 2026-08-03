@@ -65,6 +65,17 @@ class EmbeddingService:
             try:
                 return self.provider.embed_queries(texts)
             except Exception as e:
+                error_text = str(e)
+                # Dependency/configuration errors are non-retriable; fail fast.
+                if (
+                    "No module named 'peft'" in error_text
+                    or "requires the following packages" in error_text
+                ):
+                    raise RuntimeError(
+                        "Local omni embedding dependencies are missing. "
+                        "Install with: pip install 'verity-rag[local-ml]' "
+                        "or configure EMBEDDING_BASE_URL for a remote embeddings API."
+                    ) from e
                 last_error = e
                 delay = min(2**attempt, 30.0)
                 logger.warning(

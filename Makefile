@@ -64,6 +64,7 @@ help:
 	@echo "worker        - Start ARQ worker (outside Docker)"
 	@echo "run           - Start API server (outside Docker)"
 	@echo "migrate       - Run Alembic migrations"
+	@echo "migrate-container - Run Alembic migrations inside API container"
 	@echo "wait          - Wait for services to be ready"
 	@echo "reset-docs    - Clear all documents from DB, Milvus, and queues"
 	@echo "reset-docs-force - Same + CASCADE truncation"
@@ -169,6 +170,10 @@ migrate:
 	uv run alembic revision --autogenerate -m "Auto-generated migration"
 	uv run alembic upgrade head
 
+migrate-container:
+	@echo "🔄 Running database migrations inside API container..."
+	$(COMPOSE) exec api alembic upgrade head
+
 wait:
 	@echo "⏳ Waiting for services to be ready..."
 	python scripts/wait_for_services.py
@@ -181,7 +186,7 @@ reset-docs-force:
 	@echo "🗑️  Force-clearing all documents (CASCADE truncation)..."
 	uv run python scripts/reset_documents.py --force
 
-.PHONY: run worker migrate wait reset-docs reset-docs-force
+.PHONY: run worker migrate migrate-container wait reset-docs reset-docs-force
 
 # ── Dev-Fast (data infra in containers, app on host) ─────────────
 DEV_COMPOSE_SERVICES := postgres valkey milvus-etcd milvus-minio milvus

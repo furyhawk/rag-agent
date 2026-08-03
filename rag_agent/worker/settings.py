@@ -106,8 +106,13 @@ async def process_document(
                 )
             else:
                 doc.status = "error"
-                doc.error_message = result.message
-                logger.error("Document processing failed: %s - %s", doc_id, result.message)
+                detailed_error = result.error_message or result.message
+                doc.error_message = detailed_error
+                logger.error(
+                    "Document processing failed: %s - %s",
+                    doc_id,
+                    detailed_error,
+                )
 
             await session.commit()
 

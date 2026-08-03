@@ -16,6 +16,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rag-agent-api
+    command: >
+      sh -c "alembic upgrade head && uvicorn rag_agent.app:create_app --host 0.0.0.0 --port 8100 --factory"
     ports:
       - "8100:8100"
     environment:
@@ -79,6 +81,8 @@ services:
       - media_data:/data/media
       - model_cache:/root/.cache
     depends_on:
+      api:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       valkey:
