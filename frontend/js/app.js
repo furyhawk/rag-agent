@@ -904,8 +904,9 @@ const app = createApp({
       if (store.health?.status === 'degraded') return 'Degraded';
       return store.health?.error || 'Offline';
     });
+    const appVersion = computed(() => store.health?.version || 'unknown');
 
-    return { store, pageTitle, pageComponent, isConnected, statusLabel, navigate, fmtDate, icons: Icons };
+    return { store, pageTitle, pageComponent, isConnected, statusLabel, appVersion, navigate, fmtDate, icons: Icons };
   },
   components: { StatusBadge },
 });

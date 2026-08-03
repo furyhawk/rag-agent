@@ -7,6 +7,7 @@ import time
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from rag_agent import __version__
 from rag_agent.core.database import check_connection_detailed as check_db
 from rag_agent.core.valkey import check_connection as check_valkey
 
@@ -16,7 +17,7 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health() -> dict:
     """Liveness probe — always returns 200."""
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": __version__}
 
 
 @router.get("/live")
@@ -78,6 +79,7 @@ async def readiness() -> JSONResponse:
         status_code=status_code,
         content={
             "status": "ready" if overall else "degraded",
+            "version": __version__,
             "checks": checks,
         },
     )

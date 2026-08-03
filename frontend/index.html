@@ -46,8 +46,11 @@
           </button>
         </nav>
         <div class="sidebar-footer">
-          <span class="status-dot" :class="isConnected ? 'ok' : 'err'"></span>
-          <span class="truncate">{{ statusLabel }}</span>
+          <div class="sidebar-status">
+            <span class="status-dot" :class="isConnected ? 'ok' : 'err'"></span>
+            <span class="truncate">{{ statusLabel }}</span>
+          </div>
+          <span class="app-version">Version {{ appVersion }}</span>
         </div>
       </aside>
 

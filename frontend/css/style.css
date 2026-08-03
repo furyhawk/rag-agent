@@ -129,10 +129,22 @@ a:hover { text-decoration: underline; }
   padding: 12px 16px;
   border-top: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   font-size: 12px;
   color: var(--text-muted);
+}
+.sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.app-version {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
 }
 .status-dot {
   width: 8px; height: 8px;

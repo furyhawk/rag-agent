@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from rag_agent import __version__
 from rag_agent.core.config import get_settings
 from rag_agent.core.database import close_engine, init_engine
 from rag_agent.core.exceptions import RAGAgentError
@@ -55,7 +56,7 @@ def create_app(settings=None, test_mode: bool = False) -> FastAPI:
     app = FastAPI(
         title="RAG Agent",
         description="Production-grade document ingestion and retrieval service",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan if not test_mode else None,
     )
 
