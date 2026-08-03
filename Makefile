@@ -10,6 +10,9 @@ export PYTHONPATH := $(PWD)
 # Override with:  make CONTAINER_RUNTIME=docker up
 CONTAINER_RUNTIME ?= $(shell if command -v podman &>/dev/null; then echo podman; elif command -v docker &>/dev/null; then echo docker; else echo docker; fi)
 COMPOSE := $(CONTAINER_RUNTIME) compose
+DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
+DOCKER_IMAGE ?= docker.io/your-org/verity-rag
+DOCKER_TAG ?= $(shell date +%Y%m%d-%H%M%S)
 
 # ── Environment ──────────────────────────────────────────────────
 ifeq ($(shell uname -s),Darwin)
@@ -58,7 +61,7 @@ help:
 	@echo "── Build & Publish ──────────────────────────────────────────"
 	@echo "build         - Build Python package (wheel + sdist)"
 	@echo "publish       - Build + publish to PyPI"
-	@echo "publish-docker - Build Docker image with version tag"
+	@echo "publish-docker - Build + publish multi-arch image (amd64+arm64)"
 	@echo ""
 	@echo "── Local Commands ───────────────────────────────────────────"
 	@echo "worker        - Start ARQ worker (outside Docker)"
@@ -282,9 +285,33 @@ publish: build
 	uv publish
 
 publish-docker:
-	@echo "🐳 Building and publishing Docker image..."
-	$(CONTAINER_RUNTIME) build -t verity-rag:latest .
-	$(CONTAINER_RUNTIME) tag verity-rag:latest verity-rag:$(shell date +%Y%m%d-%H%M%S)
+	@echo "🐳 Building and publishing multi-arch image for $(DOCKER_PLATFORMS)..."
+	@echo "📌 Image: $(DOCKER_IMAGE)"
+	@echo "🏷️  Tag: $(DOCKER_TAG)"
+	@if [ "$(DOCKER_IMAGE)" = "docker.io/your-org/verity-rag" ]; then \
+		echo "ERROR: Set DOCKER_IMAGE to your registry path, e.g. DOCKER_IMAGE=docker.io/<user-or-org>/verity-rag"; \
+		exit 1; \
+	fi
+	@if [ "$(CONTAINER_RUNTIME)" = "docker" ]; then \
+		docker buildx inspect rag-agent-multiarch >/dev/null 2>&1 || docker buildx create --name rag-agent-multiarch --use; \
+		docker buildx use rag-agent-multiarch; \
+		docker buildx build \
+			--platform $(DOCKER_PLATFORMS) \
+			-t $(DOCKER_IMAGE):latest \
+			-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
+			--push \
+			.; \
+	elif [ "$(CONTAINER_RUNTIME)" = "podman" ]; then \
+		podman build \
+			--platform $(DOCKER_PLATFORMS) \
+			--manifest $(DOCKER_IMAGE):$(DOCKER_TAG) \
+			.; \
+		podman manifest push --all $(DOCKER_IMAGE):$(DOCKER_TAG) docker://$(DOCKER_IMAGE):$(DOCKER_TAG); \
+		podman manifest push --all $(DOCKER_IMAGE):$(DOCKER_TAG) docker://$(DOCKER_IMAGE):latest; \
+	else \
+		echo "ERROR: Unsupported CONTAINER_RUNTIME=$(CONTAINER_RUNTIME)"; \
+		exit 1; \
+	fi
 
 .PHONY: build publish publish-docker
 
