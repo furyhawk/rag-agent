@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     )
 
     # ── Infrastructure ────────────────────────────────────────────
-    database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
+    database_url: str = "postgresql+asyncpg://rag:rag@localhost:5433/rag"
     valkey_url: str = "redis://localhost:6379/0"
     milvus_uri: str = "http://localhost:19530"
     milvus_token: str = ""

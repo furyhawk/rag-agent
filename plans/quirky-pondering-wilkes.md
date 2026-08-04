@@ -183,7 +183,7 @@ All endpoints prefixed with `/api/v1/`. JSON envelope: `{"data": ...}` / `{"erro
 |---------|-------|------|------|
 | `api` | Custom (Python 3.12) | 8100 | FastAPI application |
 | `worker` | Same image | — | ARQ worker process |
-| `postgres` | `postgres:16-alpine` | 5432 | Document tracking DB |
+| `postgres` | `postgres:16-alpine` | 5433 | Document tracking DB |
 | `valkey` | `valkey/valkey:8-alpine` | 6379 | Cache + pub/sub + ARQ queue |
 | `milvus` | `milvusdb/milvus:v2.5.4` | 19530 | Vector database (standalone) |
 | `milvus-etcd` | `quay.io/coreos/etcd:v3.5.18` | 2379 | Milvus metadata |
