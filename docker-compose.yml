@@ -21,7 +21,7 @@ services:
     ports:
       - "8100:8100"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5433/rag
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
       - VALKEY_URL=redis://valkey:6379/0
       - MILVUS_URI=http://milvus:19530
       - MILVUS_TOKEN=${MILVUS_TOKEN:-}
@@ -63,7 +63,7 @@ services:
     container_name: rag-agent-worker
     command: arq rag_agent.worker.settings.WorkerSettings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5433/rag
+      - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
       - VALKEY_URL=redis://valkey:6379/0
       - MILVUS_URI=http://milvus:19530
       - MILVUS_TOKEN=${MILVUS_TOKEN:-}
