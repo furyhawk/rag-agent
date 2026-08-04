@@ -47,7 +47,8 @@ services:
       milvus:
         condition: service_started
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8100/ready').raise_for_status()"]
+      # Keep container health tied to process liveness; /ready remains for external readiness checks.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8100/live"]
       interval: 15s
       timeout: 10s
       retries: 5
