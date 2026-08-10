@@ -77,6 +77,7 @@ services:
       - MEDIA_DIR=/data/media
       - CROSS_ENCODER_MODEL=${CROSS_ENCODER_MODEL:-cross-encoder/ms-marco-MiniLM-L6-v2}
       - HF_TOKEN=${HF_TOKEN:-}
+      - WORKER_JOB_TIMEOUT=${WORKER_JOB_TIMEOUT:-4800}
       - LOG_FORMAT=${LOG_FORMAT:-json}
     volumes:
       - media_data:/data/media
