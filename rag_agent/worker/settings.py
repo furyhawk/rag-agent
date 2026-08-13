@@ -176,7 +176,7 @@ class WorkerSettings:
 
     functions: list = [_noop_job, process_document]
     redis_settings: RedisSettings | None = _get_redis_settings()
-    max_jobs: int = 4
+    max_jobs: int = settings.worker_max_jobs
     job_timeout: int = settings.worker_job_timeout
     retry_jobs: bool = True
     max_tries: int = 3

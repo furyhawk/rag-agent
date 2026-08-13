@@ -112,6 +112,7 @@ class Settings(BaseSettings):
 
     # ── Worker ───────────────────────────────────────────────────
     worker_job_timeout: int = 4800  # seconds per ARQ job (Milvus flush can be slow)
+    worker_max_jobs: int = 4  # max concurrent jobs per ARQ worker
 
     # ── Server ───────────────────────────────────────────────────
     host: str = "0.0.0.0"
