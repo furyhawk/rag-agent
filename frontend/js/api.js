@@ -68,6 +68,13 @@ class ApiClient {
   downloadUrl(id) {
     return `${this.baseURL}/api/v1/documents/${id}/download`;
   }
+  imageUrl(id) {
+    return `${this.baseURL}/api/v1/images/${encodeURIComponent(id)}`;
+  }
+  documentImages(documentId, collectionName = 'documents') {
+    const qs = new URLSearchParams({ collection_name: collectionName }).toString();
+    return this._fetch(`/api/v1/documents/${encodeURIComponent(documentId)}/images?${qs}`);
+  }
 
   async uploadDocument(file, collectionName = 'documents', replace = true) {
     const fd = new FormData();

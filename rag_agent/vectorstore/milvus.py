@@ -177,6 +177,29 @@ class MilvusVectorStore(BaseVectorStore):
         )
         return self.group_documents(results)
 
+    async def get_document_images(
+        self, collection_name: str, document_id: str
+    ) -> list[dict[str, Any]]:
+        """Collect deduplicated image references for a document's chunks."""
+        await self.ensure_collection(collection_name)
+        sanitized = self.sanitize_id(document_id)
+        results: list[dict[str, Any]] = await self._client.query(
+            collection_name=collection_name,
+            filter=f'parent_doc_id == "{sanitized}"',
+            output_fields=["metadata"],
+            limit=10000,
+        )
+        seen: set[str] = set()
+        images: list[dict[str, Any]] = []
+        for item in results:
+            for img in (item.get("metadata") or {}).get("images") or []:
+                image_id = str(img.get("image_id", ""))
+                if not image_id or image_id in seen:
+                    continue
+                seen.add(image_id)
+                images.append(img)
+        return images
+
     async def list_collections(self) -> list[str]:
         result: list[str] = await self._client.list_collections()
         return result

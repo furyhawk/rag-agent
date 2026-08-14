@@ -20,6 +20,18 @@ class SearchRequest(BaseModel):
     document_id: str | None = None
 
 
+class SearchResultImage(BaseModel):
+    """Reference to an image attached to a search result."""
+
+    image_id: str
+    url: str
+    mime_type: str = "image/png"
+    page_num: int = 0
+    width: int | None = None
+    height: int | None = None
+    description: str = ""
+
+
 class SearchResultItem(BaseModel):
     """Single search result."""
 
@@ -28,6 +40,7 @@ class SearchResultItem(BaseModel):
     metadata: dict[str, Any]
     parent_doc_id: str | None = None
     chunk_id: str | None = None
+    images: list[SearchResultImage] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):

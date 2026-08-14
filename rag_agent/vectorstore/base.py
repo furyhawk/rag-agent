@@ -72,6 +72,13 @@ class BaseVectorStore(ABC):
         """Return list of unique documents in a collection."""
         ...
 
+    @abstractmethod
+    async def get_document_images(
+        self, collection_name: str, document_id: str
+    ) -> list[dict[str, Any]]:
+        """Return image references for a document's chunks (deduplicated)."""
+        ...
+
     def validate_collection_name(self, name: str) -> None:
         """Validate collection name format.
 
@@ -89,12 +96,32 @@ class BaseVectorStore(ABC):
     def build_chunk_metadata(
         self, chunk: DocumentChunk, document: Document
     ) -> dict[str, Any]:
-        """Build metadata dict for a chunk stored in the vector DB."""
+        """Build metadata dict for a chunk stored in the vector DB.
+
+        Extracted images are referenced (id + display info, not bytes) so
+        search results can surface and serve them to the user.
+        """
+        image_meta: list[dict[str, Any]] = []
+        for img in chunk.images:
+            description = (img.description or "").strip()
+            if len(description) > 500:
+                description = description[:500] + "..."
+            image_meta.append(
+                {
+                    "image_id": img.image_id,
+                    "page_num": img.page_num,
+                    "mime_type": img.mime_type,
+                    "width": img.width,
+                    "height": img.height,
+                    "description": description,
+                }
+            )
         meta = {
             "page_num": chunk.page_num,
             "chunk_num": chunk.chunk_num,
             "has_images": bool(chunk.images),
             "image_count": len(chunk.images),
+            "images": image_meta,
             **document.metadata.model_dump(),
         }
         return meta

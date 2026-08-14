@@ -13,12 +13,34 @@ from rag_agent.schemas.search import (
     MultiSearchResponse,
     SearchRequest,
     SearchResponse,
+    SearchResultImage,
     SearchResultItem,
 )
 from rag_agent.vectorstore.base import BaseVectorStore
 from rag_agent.vectorstore.milvus import MilvusVectorStore
 
 router = APIRouter(tags=["search"])
+
+
+def _result_images(metadata: dict) -> list[SearchResultImage]:
+    """Build image references (with fetch URLs) from chunk metadata."""
+    items: list[SearchResultImage] = []
+    for img in metadata.get("images") or []:
+        image_id = str(img.get("image_id", ""))
+        if not image_id:
+            continue
+        items.append(
+            SearchResultImage(
+                image_id=image_id,
+                url=f"/api/v1/images/{image_id}",
+                mime_type=str(img.get("mime_type", "image/png")),
+                page_num=int(img.get("page_num", 0)),
+                width=img.get("width"),
+                height=img.get("height"),
+                description=str(img.get("description", "")),
+            )
+        )
+    return items
 
 
 async def get_vector_store(settings: SettingsDep) -> BaseVectorStore:
@@ -65,6 +87,7 @@ async def search(
                 metadata=r.metadata,
                 parent_doc_id=r.parent_doc_id,
                 chunk_id=r.chunk_id,
+                images=_result_images(r.metadata),
             )
             for r in results
         ],
@@ -101,6 +124,7 @@ async def search_multi(
                 metadata=r.metadata,
                 parent_doc_id=r.parent_doc_id,
                 chunk_id=r.chunk_id,
+                images=_result_images(r.metadata),
             )
             for r in results
         ],
@@ -138,6 +162,7 @@ async def search_by_document(
                 metadata=r.metadata,
                 parent_doc_id=r.parent_doc_id,
                 chunk_id=r.chunk_id,
+                images=_result_images(r.metadata),
             )
             for r in results
         ],

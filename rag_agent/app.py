@@ -110,12 +110,14 @@ def create_app(settings=None, test_mode: bool = False) -> FastAPI:
     from rag_agent.routes.health import router as health_router
     from rag_agent.routes.collections import router as collections_router
     from rag_agent.routes.documents import router as documents_router
+    from rag_agent.routes.images import router as images_router
     from rag_agent.routes.search import router as search_router
     from rag_agent.routes.sync import router as sync_router
 
     app.include_router(health_router)
     app.include_router(collections_router)
     app.include_router(documents_router)
+    app.include_router(images_router)
     app.include_router(search_router)
     app.include_router(sync_router)
 

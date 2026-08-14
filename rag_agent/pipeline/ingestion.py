@@ -14,6 +14,7 @@ from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.service import EmbeddingService
 from rag_agent.models.ingestion import IngestionResult, IngestionStatus
 from rag_agent.models.document import Document
+from rag_agent.pipeline.file_storage import LocalFileStorage
 from rag_agent.pipeline.processor import DocumentProcessor
 from rag_agent.vectorstore.base import BaseVectorStore
 
@@ -33,11 +34,16 @@ class IngestionService:
         vector_store: BaseVectorStore,
         on_event: Callable[..., Awaitable[None]] | None = None,
         progress_callback: ProgressCallback | None = None,
+        media_dir: str | None = None,
     ) -> None:
         self.processor = processor
         self.store = vector_store
         self._on_event = on_event
         self._progress = progress_callback
+        # Used to persist extracted images so they can be served/displayed.
+        self._image_storage = (
+            LocalFileStorage(media_dir) if media_dir else None
+        )
 
     @classmethod
     def build(
@@ -50,6 +56,7 @@ class IngestionService:
         models_cache_dir: str | None = None,
         on_event: Callable[..., Awaitable[None]] | None = None,
         progress_callback: ProgressCallback | None = None,
+        media_dir: str | None = None,
     ) -> IngestionService:
         """Construct an IngestionService from application settings."""
         from rag_agent.vectorstore.milvus import MilvusVectorStore
@@ -72,6 +79,7 @@ class IngestionService:
             vector_store=vector_store,
             on_event=on_event,
             progress_callback=progress_callback,
+            media_dir=media_dir,
         )
 
     async def _emit(self, event: str, data: dict) -> None:
@@ -182,6 +190,14 @@ class IngestionService:
                     filename=filepath.name,
                 )
 
+            # 2b. Persist extracted images so they can be served/displayed.
+            if self._image_storage:
+                if existing_id:
+                    await self._image_storage.delete_document_images(
+                        collection_name, existing_id
+                    )
+                await self._persist_images(document, collection_name)
+
             # 3. Embed + Store
             await self._notify(IngestionStatus.EMBEDDING)
             await self.store.insert_document(
@@ -225,6 +241,32 @@ class IngestionService:
                 message=f"Failed to process {filepath.name}",
             )
 
+    async def _persist_images(
+        self, document: Document, collection_name: str
+    ) -> None:
+        """Save all extracted images for a document to disk."""
+        if not self._image_storage:
+            return
+        saved = 0
+        for page in document.pages or []:
+            for image in page.images or []:
+                if not image.image_bytes:
+                    continue
+                await self._image_storage.save_image(
+                    image_id=image.image_id,
+                    data=image.image_bytes,
+                    mime_type=image.mime_type,
+                    collection=collection_name,
+                    document_id=document.id,
+                )
+                saved += 1
+        if saved:
+            logger.info(
+                "ingest.images_saved",
+                filename=document.metadata.filename,
+                images=saved,
+            )
+
     async def find_existing(
         self, collection_name: str, source_path: str
     ) -> str | None:
@@ -240,6 +282,10 @@ class IngestionService:
                 collection_name=collection_name,
                 document_id=document_id,
             )
+            if self._image_storage:
+                await self._image_storage.delete_document_images(
+                    collection_name, document_id
+                )
             await self._emit(
                 "rag.document.deleted",
                 {"document_id": document_id, "collection": collection_name},

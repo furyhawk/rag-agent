@@ -133,6 +133,7 @@ const Icons = {
   db: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
   collections: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
   doc: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>',
+  image: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -593,6 +594,29 @@ const DocumentDetailPage = {
             <strong>Error:</strong> {{ doc.error_message }}
             <div v-if="doc.last_error" class="mt-2 text-sm">Previous: {{ doc.last_error }}</div>
           </div>
+
+          <div v-if="docImages.length" class="mt-4">
+            <div class="card-title mb-2">Images <span class="text-muted">({{ docImages.length }})</span></div>
+            <div class="result-images">
+              <div
+                v-for="img in docImages"
+                :key="img.image_id"
+                class="result-thumb result-thumb-lg"
+                :title="img.description || 'Image'"
+                @click="openImage(img)">
+                <img :src="img.url" :alt="img.description || 'Image'" loading="lazy" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lightbox -->
+        <div v-if="lightbox.open" class="lightbox-overlay" @click.self="closeLightbox">
+          <div class="lightbox">
+            <button class="lightbox-close" title="Close" @click="closeLightbox" v-html="icons.x"></button>
+            <img :src="lightbox.url" :alt="lightbox.description || 'Image'" />
+            <div v-if="lightbox.description" class="lightbox-desc">{{ lightbox.description }}</div>
+          </div>
         </div>
 
         <!-- Delete modal -->
@@ -613,12 +637,32 @@ const DocumentDetailPage = {
     const doc = ref(null);
     const loading = ref(true);
     const showDelete = ref(false);
+    const docImages = ref([]);
+    const lightbox = reactive({ open: false, url: '', description: '' });
+
+    function openImage(img) {
+      lightbox.url = img.url;
+      lightbox.description = img.description || '';
+      lightbox.open = true;
+    }
+    function closeLightbox() {
+      lightbox.open = false;
+    }
 
     async function load() {
       loading.value = true;
       try {
         const data = await api.getDocument(store.documentId);
         doc.value = data;
+        // Load extracted images (requires a processed vector document id)
+        if (data?.vector_document_id) {
+          try {
+            const imgs = await api.documentImages(data.vector_document_id, data.collection_name || 'documents');
+            docImages.value = imgs || [];
+          } catch { docImages.value = []; }
+        } else {
+          docImages.value = [];
+        }
       } catch (e) {
         addNotification(e.message, 'error');
         doc.value = null;
@@ -645,7 +689,7 @@ const DocumentDetailPage = {
       } catch (e) { addNotification(e.message, 'error'); }
     }
 
-    return { doc, loading, showDelete, goBack, downloadDoc, retryDoc, doDelete, fmtSize, fmtDate, icons: Icons };
+    return { doc, loading, showDelete, docImages, lightbox, openImage, closeLightbox, goBack, downloadDoc, retryDoc, doDelete, fmtSize, fmtDate, icons: Icons };
   }
 };
 
@@ -809,12 +853,37 @@ const SearchPage = {
             </div>
           </div>
           <div class="result-content">{{ r.content }}</div>
+          <div v-if="r.images && r.images.length" class="result-images">
+            <div
+              v-for="img in r.images"
+              :key="img.image_id"
+              class="result-thumb"
+              :title="img.description || 'Image'"
+              @click="openImage(img)">
+              <img :src="img.url" :alt="img.description || 'Image'" loading="lazy" />
+              <div v-if="r.images.length > 1" class="result-thumb-badge">
+                <span v-html="icons.image"></span>
+              </div>
+            </div>
+          </div>
           <div class="result-meta">
             <span title="Score">{{ (r.score * 100).toFixed(1) }}% match</span>
             <span v-if="r.metadata?.page_num">Page {{ r.metadata.page_num }}</span>
+            <span v-if="r.images && r.images.length" title="Images on this page">
+              {{ r.images.length }} image(s)
+            </span>
             <span v-if="r.parent_doc_id" title="Document ID">{{ r.parent_doc_id.slice(0, 8) }}…</span>
             <span v-if="r.metadata?.chunk_id" class="text-muted">Chunk {{ r.metadata.chunk_id.slice(0, 8) }}…</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Lightbox -->
+      <div v-if="lightbox.open" class="lightbox-overlay" @click.self="closeLightbox">
+        <div class="lightbox">
+          <button class="lightbox-close" title="Close" @click="closeLightbox" v-html="icons.x"></button>
+          <img :src="lightbox.url" :alt="lightbox.description || 'Image'" />
+          <div v-if="lightbox.description" class="lightbox-desc">{{ lightbox.description }}</div>
         </div>
       </div>
     </div>
@@ -829,6 +898,16 @@ const SearchPage = {
     const searching = ref(false);
     const results = ref([]);
     const hasSearched = ref(false);
+    const lightbox = reactive({ open: false, url: '', description: '' });
+
+    function openImage(img) {
+      lightbox.url = img.url;
+      lightbox.description = img.description || '';
+      lightbox.open = true;
+    }
+    function closeLightbox() {
+      lightbox.open = false;
+    }
 
     async function doSearch() {
       const q = query.value.trim();
@@ -862,6 +941,7 @@ const SearchPage = {
 
     return {
       query, lastQuery, collectionName, limit, useReranker, multiCollection, searching, results, hasSearched,
+      lightbox, openImage, closeLightbox,
       doSearch, store, icons: Icons,
     };
   }

@@ -7,6 +7,7 @@ Production-grade, self-hosted document ingestion and retrieval service.
 - **Multi-format parsing**: PDF, DOCX, TXT, Markdown with smart layout preservation
 - **Chunking strategies**: Recursive character, Markdown headers
 - **Image extraction and LLM description**: Makes visual content searchable
+- **Image persistence & display**: Extracted images are stored, served over the API, and shown in search results and document views (with lightbox)
 - **OCR fallback**: LLM vision for scanned pages
 - **Vector storage**: Milvus with cosine similarity search
 - **Hybrid retrieval**: BM25 keyword search + vector fusion (RRF)
@@ -47,12 +48,20 @@ The project includes a responsive dark-themed web dashboard built with Vue 3
 | **Dashboard** | System health, collection stats, recent documents |
 | **Documents** | Upload (drag & drop), list/filter, delete, retry, download |
 | **Collections** | Create, browse, delete vector collections |
-| **Search** | Semantic search with reranker, multi-collection mode, score visualization |
+| **Search** | Semantic search with reranker, multi-collection mode, score visualization, image thumbnails + lightbox |
 
 **Access the UI at** [`http://localhost:8100/`](http://localhost:8100/) (redirects to `/ui/`).
 
 The frontend is served directly by the API server — no separate build step or
 dev server needed. Source lives in the `frontend/` directory.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Search results with images](docs/screenshots/search.png) |
+| ![Document detail with image gallery](docs/screenshots/document-detail.png) | ![Image lightbox](docs/screenshots/search-lightbox.png) |
+| ![Documents](docs/screenshots/documents.png) | ![Collections](docs/screenshots/collections.png) |
 
 ## Quick Start
 
@@ -182,6 +191,10 @@ uv run arq rag_agent.worker.settings.WorkerSettings
 - `POST /api/v1/documents/{id}/retry` — Re-queue failed ingestion
 - `GET /api/v1/documents/{id}/download` — Download original
 
+### Images
+- `GET /api/v1/images/{image_id}` — Serve an extracted image
+- `GET /api/v1/documents/{id}/images?collection_name=documents` — List a document's images
+
 ### Search
 - `POST /api/v1/search` — Vector search
 - `POST /api/v1/search/multi` — Multi-collection search
@@ -203,7 +216,8 @@ Key settings:
 - `MILVUS_URI` — Milvus connection
 - `CHUNK_SIZE`, `CHUNK_OVERLAP` — Text chunking
 - `ENABLE_HYBRID_SEARCH` — BM25 + vector fusion
-- `ENABLE_IMAGE_DESCRIPTION` — LLM vision for images
+- `ENABLE_IMAGE_DESCRIPTION` — LLM vision for images (searchable descriptions)
+- `MEDIA_DIR` — Where uploaded files and extracted images are stored
 
 ## Development Tasks
 

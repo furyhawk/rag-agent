@@ -37,6 +37,7 @@ async def trigger_sync(
             embedding_api_key=settings.embedding_api_key,
             embedding_base_url=settings.embedding_base_url,
             models_cache_dir=str(settings.models_cache_dir),
+            media_dir=settings.media_dir,
         ),
         settings=RAGSettings(),
     )
