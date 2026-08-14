@@ -9,6 +9,7 @@ Used when EMBEDDING_BASE_URL is empty and the model name contains "omni".
 from __future__ import annotations
 
 import io
+import os
 from typing import Any
 
 import numpy as np
@@ -40,31 +41,61 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
         self._model: Any | None = None
         self.cache_dir = cache_dir
         self.default_task = default_task
+        self._using_cpu_fallback = False
+
+    @staticmethod
+    def _is_triton_compiler_error(error: Exception) -> bool:
+        msg = str(error)
+        return (
+            "Failed to find C compiler" in msg
+            or "triton.knobs.build.impl" in msg
+        )
+
+    def _load_model(self, device: str | None = None) -> Any:
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "Local omni embeddings require sentence-transformers and peft. "
+                "Install with: pip install 'verity-rag[local-ml]'"
+            ) from exc
+        logger.info(
+            "embedding.omni.load",
+            model=self.model_name,
+            task=self.default_task,
+            device=device or "auto",
+        )
+        return SentenceTransformer(
+            self.model_name,
+            cache_folder=self.cache_dir,
+            trust_remote_code=True,
+            model_kwargs={"default_task": self.default_task},
+            device=device,
+        )
 
     # ── Model loading ────────────────────────────────────────────
 
     @property
     def model(self) -> Any:
         if self._model is None:
-            try:
-                from sentence_transformers import SentenceTransformer
-            except ModuleNotFoundError as exc:
-                raise RuntimeError(
-                    "Local omni embeddings require sentence-transformers and peft. "
-                    "Install with: pip install 'verity-rag[local-ml]'"
-                ) from exc
-            logger.info(
-                "embedding.omni.load",
-                model=self.model_name,
-                task=self.default_task,
-            )
-            self._model = SentenceTransformer(
-                self.model_name,
-                cache_folder=self.cache_dir,
-                trust_remote_code=True,
-                model_kwargs={"default_task": self.default_task},
-            )
+            preferred_device = os.getenv("EMBEDDING_DEVICE") or None
+            self._model = self._load_model(device=preferred_device)
         return self._model
+
+    def _with_triton_fallback(self, func: Any) -> Any:
+        try:
+            return func()
+        except Exception as exc:
+            if not self._using_cpu_fallback and self._is_triton_compiler_error(exc):
+                logger.warning(
+                    "embedding.omni.triton_fallback",
+                    model=self.model_name,
+                    error=str(exc),
+                )
+                self._using_cpu_fallback = True
+                self._model = self._load_model(device="cpu")
+                return func()
+            raise
 
     # ── Image helpers ────────────────────────────────────────────
 
@@ -113,10 +144,12 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
         Batches text-only encoding for efficiency.
         """
         normalized_texts = [self._force_text_input(t) for t in texts]
-        embeddings = self.model.encode(
-            normalized_texts,
-            prompt_name="query",
-            show_progress_bar=False,
+        embeddings = self._with_triton_fallback(
+            lambda: self.model.encode(
+                normalized_texts,
+                prompt_name="query",
+                show_progress_bar=False,
+            )
         )
         return (
             embeddings.tolist()
@@ -147,13 +180,19 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
                 pil_images = self._load_images(chunk.images)
                 if pil_images:
                     # Fused multimodal embedding: text + first image
-                    emb = self.model.encode_document(
-                        (chunk_text, pil_images[0])
+                    emb = self._with_triton_fallback(
+                        lambda: self.model.encode_document(
+                            (chunk_text, pil_images[0])
+                        )
                     )
                 else:
-                    emb = self.model.encode_document(chunk_text)
+                    emb = self._with_triton_fallback(
+                        lambda: self.model.encode_document(chunk_text)
+                    )
             else:
-                emb = self.model.encode_document(chunk_text)
+                emb = self._with_triton_fallback(
+                    lambda: self.model.encode_document(chunk_text)
+                )
 
             vectors.append(
                 emb.tolist()

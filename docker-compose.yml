@@ -62,6 +62,7 @@ services:
       dockerfile: Dockerfile
     container_name: rag-agent-worker
     command: arq rag_agent.worker.settings.WorkerSettings
+    gpus: all
     environment:
       - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
       - VALKEY_URL=redis://valkey:6379/0
@@ -79,6 +80,8 @@ services:
       - HF_TOKEN=${HF_TOKEN:-}
       - WORKER_JOB_TIMEOUT=${WORKER_JOB_TIMEOUT:-4800}
       - LOG_FORMAT=${LOG_FORMAT:-json}
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     volumes:
       - media_data:/data/media
       - model_cache:/root/.cache

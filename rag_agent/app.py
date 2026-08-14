@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import os
 
 from pathlib import Path
 
@@ -20,6 +21,31 @@ from rag_agent.core.logging import get_logger, setup_logging
 from rag_agent.core.valkey import close_valkey, init_valkey
 
 logger = get_logger(__name__)
+
+
+def _resolve_frontend_dir() -> Path | None:
+    """Resolve frontend directory across source and installed package layouts."""
+    candidates: list[Path] = []
+
+    # Explicit override for deployments with non-standard layouts.
+    override = os.getenv("FRONTEND_DIR", "").strip()
+    if override:
+        candidates.append(Path(override))
+
+    module_root = Path(__file__).resolve().parent
+    candidates.extend(
+        [
+            module_root.parent / "frontend",  # source checkout: <repo>/frontend
+            module_root / "frontend",  # packaged data: .../site-packages/rag_agent/frontend
+            Path.cwd() / "frontend",  # container/workdir: /app/frontend
+        ]
+    )
+
+    for candidate in candidates:
+        if candidate.is_dir() and (candidate / "index.html").is_file():
+            return candidate
+
+    return None
 
 
 @asynccontextmanager
@@ -94,8 +120,8 @@ def create_app(settings=None, test_mode: bool = False) -> FastAPI:
     app.include_router(sync_router)
 
     # ── Frontend static files ──────────────────────────────
-    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-    if frontend_dir.is_dir():
+    frontend_dir = _resolve_frontend_dir()
+    if frontend_dir:
         app.mount(
             "/ui",
             StaticFiles(directory=str(frontend_dir), html=True),
@@ -105,5 +131,7 @@ def create_app(settings=None, test_mode: bool = False) -> FastAPI:
         @app.get("/", include_in_schema=False)
         async def root_redirect():
             return RedirectResponse(url="/ui/")
+    else:
+        logger.warning("frontend.not_found", cwd=str(Path.cwd()))
 
     return app
