@@ -62,7 +62,10 @@ services:
       dockerfile: Dockerfile
     container_name: rag-agent-worker
     command: arq rag_agent.worker.settings.WorkerSettings
-    gpus: all
+    # NOTE: GPU access is opt-in via the docker-compose.gpu.yml override
+    # (e.g. `make up-local-ml-full GPU=1`). On hosts without an NVIDIA GPU
+    # this must be omitted or the container runtime fails with
+    # "no known GPU vendor found" (CDI lookup error).
     environment:
       - DATABASE_URL=postgresql+asyncpg://rag:rag@postgres:5432/rag
       - VALKEY_URL=redis://valkey:6379/0

@@ -10,6 +10,11 @@ export PYTHONPATH := $(PWD)
 # Override with:  make CONTAINER_RUNTIME=docker up
 CONTAINER_RUNTIME ?= $(shell if command -v podman &>/dev/null; then echo podman; elif command -v docker &>/dev/null; then echo docker; else echo docker; fi)
 COMPOSE := $(CONTAINER_RUNTIME) compose
+# Optional GPU override for the worker service (NVIDIA hosts only).
+# Enable with:  make up GPU=1   (see docker-compose.gpu.yml)
+GPU_OVERRIDE := $(if $(filter 1,$(GPU)),-f docker-compose.gpu.yml,)
+# Combined local-ml compose command (base + override)
+LOCAL_ML_COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml
 DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
 DOCKER_IMAGE ?= docker.io/your-org/verity-rag
 DOCKER_TAG ?= $(shell date +%Y%m%d-%H%M%S)
@@ -46,6 +51,11 @@ help:
 	@echo "ps            - Show running containers"
 	@echo "ps-local-ml   - Show containers for stack launched with local-ml override"
 	@echo ""
+	@echo "── GPU (NVIDIA hosts only) ──────────────────────────────────"
+	@echo "  Append GPU=1 to any stack target to enable worker GPU access"
+	@echo "  e.g.  make up GPU=1  /  make up-local-ml-full GPU=1"
+	@echo ""
+	@echo "── Dev-Fast (no app containers) ─────────────────────────────"
 	@echo "── Dev-Fast (no app containers) ─────────────────────────────"
 	@echo "dev-up        - Start ONLY data infra (Postgres, Valkey, Milvus)"
 	@echo "dev-down      - Stop data infra containers"
@@ -121,41 +131,41 @@ typecheck:
 # ── Container Stack ──────────────────────────────────────────────
 up:
 	@echo "🐳 Starting container stack with $(CONTAINER_RUNTIME)..."
-	$(COMPOSE) up -d
+	$(COMPOSE) -f docker-compose.yml $(GPU_OVERRIDE) up -d
 
 up-local-ml:
 	@echo "🐳 Starting stack with worker local-ml only (api lean)..."
 	LOCAL_ML_API=false LOCAL_ML_WORKER=true COMPOSE_PARALLEL_LIMIT=1 \
-	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml up -d --build
+	$(LOCAL_ML_COMPOSE) $(GPU_OVERRIDE) up -d --build
 
 up-local-ml-full:
 	@echo "🐳 Starting stack with local-ml for api and worker..."
 	LOCAL_ML_API=true LOCAL_ML_WORKER=true COMPOSE_PARALLEL_LIMIT=1 \
-	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml up -d --build
+	$(LOCAL_ML_COMPOSE) $(GPU_OVERRIDE) up -d --build
 
 down:
 	@echo "⏹️  Stopping container stack..."
-	$(COMPOSE) down
+	$(COMPOSE) -f docker-compose.yml $(GPU_OVERRIDE) down
 
 down-local-ml:
 	@echo "⏹️  Stopping local-ml override container stack..."
-	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml down
+	$(LOCAL_ML_COMPOSE) $(GPU_OVERRIDE) down
 
 logs:
 	@echo "📋 Showing service logs..."
-	$(COMPOSE) logs -f --tail=100
+	$(COMPOSE) -f docker-compose.yml $(GPU_OVERRIDE) logs -f --tail=100
 
 logs-local-ml:
 	@echo "📋 Showing local-ml override service logs..."
-	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml logs -f --tail=100
+	$(LOCAL_ML_COMPOSE) $(GPU_OVERRIDE) logs -f --tail=100
 
 ps:
 	@echo "📋 Showing running containers..."
-	$(COMPOSE) ps
+	$(COMPOSE) -f docker-compose.yml $(GPU_OVERRIDE) ps
 
 ps-local-ml:
 	@echo "📋 Showing running containers (local-ml override)..."
-	$(COMPOSE) -f docker-compose.yml -f docker-compose.local-ml.yml ps
+	$(LOCAL_ML_COMPOSE) $(GPU_OVERRIDE) ps
 
 .PHONY: up up-local-ml up-local-ml-full down down-local-ml logs logs-local-ml ps ps-local-ml
 

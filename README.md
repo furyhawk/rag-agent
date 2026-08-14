@@ -87,6 +87,10 @@ make up-local-ml
 # Optional: enable local-ml for both api and worker (larger image footprint)
 make up-local-ml-full
 
+# Optional: enable NVIDIA GPU access for the worker (GPU host only)
+# Requires nvidia-container-toolkit / nvidia-cdi on the host.
+make up-local-ml-full GPU=1
+
 # Wait for services to be ready
 make wait
 

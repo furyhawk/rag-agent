@@ -1,0 +1,16 @@
+# Optional override: enable NVIDIA GPU access for the worker service.
+# Only use on hosts with an NVIDIA GPU and driver/CDI configured
+# (nvidia-container-toolkit, or podman with nvidia-cdi).
+#
+# Usage via Makefile (set GPU=1 on any stack target):
+#   make up GPU=1
+#   make up-local-ml GPU=1
+#   make up-local-ml-full GPU=1
+#
+# Or directly:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#   podman compose -f docker-compose.yml -f docker-compose.local-ml.yml -f docker-compose.gpu.yml up -d --build
+
+services:
+  worker:
+    gpus: all
