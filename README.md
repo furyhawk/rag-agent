@@ -192,7 +192,7 @@ uv run arq rag_agent.worker.settings.WorkerSettings
 - `GET /api/v1/documents/{id}/download` — Download original
 
 ### Images
-- `GET /api/v1/images/{image_id}` — Serve an extracted image as a base64 data URI (`data:image/png;base64,...`)
+- `GET /api/v1/images/{image_id}` — Serve an extracted image (raw bytes; add `?format=data_uri` for a base64 data URI)
 - `GET /api/v1/documents/{id}/images?collection_name=documents` — List a document's images
 
 ### Search

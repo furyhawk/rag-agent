@@ -41,21 +41,30 @@ async def get_vector_store(settings: SettingsDep) -> BaseVectorStore:
 async def get_image(
     image_id: str,
     settings: SettingsDep,
+    response_format: str = Query(
+        default="raw", alias="format", pattern="^(raw|data_uri)$"
+    ),
 ) -> Response:
-    """Serve a single persisted image by id as a base64 data URI string.
+    """Serve a single persisted image by id.
 
-    Returns a data URI like ``data:image/png;base64,<data>`` so the response
-    can be used directly as an image source (e.g. an ``<img src>`` value).
+    Defaults to the raw image bytes so it renders directly in a browser or an
+    ``<img src>``. Pass ``?format=data_uri`` to get a base64 data URI string
+    like ``data:image/png;base64,<data>`` instead.
     """
     storage = LocalFileStorage(settings.media_dir)
     path = storage.resolve_image(image_id)
     if path is None or not path.exists():
         raise HTTPException(status_code=404, detail="Image not found")
     mime_type = storage.mime_type_for(path)
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    if response_format == "data_uri":
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return Response(
+            content=f"data:{mime_type};base64,{encoded}",
+            media_type="text/plain",
+        )
     return Response(
-        content=f"data:{mime_type};base64,{encoded}",
-        media_type="text/plain",
+        content=path.read_bytes(),
+        media_type=mime_type,
     )
 
 

@@ -130,7 +130,14 @@ async def test_get_image_route_serves_persisted_image(tmp_path: Path) -> None:
 
     import base64
 
+    # Default: raw image bytes (renders in a browser / <img src>).
     response = await get_image("img-serve", settings)
+    assert response.status_code == 200
+    assert response.media_type == "image/png"
+    assert response.body == PNG_BYTES
+
+    # ?format=data_uri: base64 data URI string.
+    response = await get_image("img-serve", settings, "data_uri")
     assert response.status_code == 200
     assert response.media_type == "text/plain"
     expected = "data:image/png;base64," + base64.b64encode(PNG_BYTES).decode("ascii")

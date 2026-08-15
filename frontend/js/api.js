@@ -73,7 +73,7 @@ class ApiClient {
   }
   // Fetch a stored image as a base64 data URI (data:image/png;base64,...)
   async imageDataUri(id) {
-    const url = `${this.baseURL}/api/v1/images/${encodeURIComponent(id)}`;
+    const url = `${this.baseURL}/api/v1/images/${encodeURIComponent(id)}?format=data_uri`;
     const res = await fetch(url);
     if (!res.ok) {
       let msg = `Image request failed (${res.status})`;
