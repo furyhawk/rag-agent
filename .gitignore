@@ -40,6 +40,8 @@ chroma_db/
 *.sqlite3
 milvus-data/
 .dev-media/
+debug_artifacts/
+samples/
 
 # Testing
 .pytest_cache/
