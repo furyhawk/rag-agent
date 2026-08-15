@@ -71,6 +71,17 @@ class ApiClient {
   imageUrl(id) {
     return `${this.baseURL}/api/v1/images/${encodeURIComponent(id)}`;
   }
+  // Fetch a stored image as a base64 data URI (data:image/png;base64,...)
+  async imageDataUri(id) {
+    const url = `${this.baseURL}/api/v1/images/${encodeURIComponent(id)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      let msg = `Image request failed (${res.status})`;
+      try { const body = await res.json(); msg = body.error || body.detail || msg; } catch {}
+      throw new Error(msg);
+    }
+    return res.text();
+  }
   documentImages(documentId, collectionName = 'documents') {
     const qs = new URLSearchParams({ collection_name: collectionName }).toString();
     return this._fetch(`/api/v1/documents/${encodeURIComponent(documentId)}/images?${qs}`);

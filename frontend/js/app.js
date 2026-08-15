@@ -33,6 +33,15 @@ function truncate(str, len = 120) {
   if (!str) return '';
   return str.length > len ? str.slice(0, len) + '...' : str;
 }
+// Fetch an image object's base64 data URI so it can render via <img :src="img.url">.
+// The images endpoint now returns data:image/png;base64,... instead of raw bytes.
+async function hydrateImage(img) {
+  if (!img || !img.image_id) return img;
+  try {
+    img.url = await api.imageDataUri(img.image_id);
+  } catch { /* keep the original URL on failure */ }
+  return img;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    Store (shared reactive state)
@@ -658,6 +667,7 @@ const DocumentDetailPage = {
         if (data?.vector_document_id) {
           try {
             const imgs = await api.documentImages(data.vector_document_id, data.collection_name || 'documents');
+            await Promise.all((imgs || []).map(hydrateImage));
             docImages.value = imgs || [];
           } catch { docImages.value = []; }
         } else {
@@ -927,10 +937,12 @@ const SearchPage = {
             : (store.collections.length > 0 ? store.collections.map(c => c.name) : ['documents']);
           const data = await api.multiSearch(params);
           results.value = data.results || [];
+          await Promise.all(results.value.flatMap(r => r.images || []).map(hydrateImage));
         } else {
           params.collection_name = collectionName.value || 'documents';
           const data = await api.search(params);
           results.value = data.results || [];
+          await Promise.all(results.value.flatMap(r => r.images || []).map(hydrateImage));
         }
       } catch (e) {
         addNotification(e.message, 'error');

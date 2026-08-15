@@ -128,10 +128,13 @@ async def test_get_image_route_serves_persisted_image(tmp_path: Path) -> None:
 
     from fastapi import HTTPException
 
+    import base64
+
     response = await get_image("img-serve", settings)
     assert response.status_code == 200
-    assert response.media_type == "image/png"
-    assert response.body == PNG_BYTES
+    assert response.media_type == "text/plain"
+    expected = "data:image/png;base64," + base64.b64encode(PNG_BYTES).decode("ascii")
+    assert response.body.decode() == expected
 
     with pytest.raises(HTTPException) as exc:
         await get_image("img-missing", settings)
