@@ -518,27 +518,22 @@ async def _run(args: argparse.Namespace) -> int:
     # 5. Diagnostics — surface silent pipeline failures.
     raw_tables = _count_raw_tables(pdf_path)
     md_tables = _count_markdown_tables(document)
-    has_pandas = _importable("pandas")
-    has_tabulate = _importable("tabulate")
+    has_marker = _importable("marker")
     lines += [
         "",
         "Diagnostics",
         "------------",
-        f"  pandas   : {'available' if has_pandas else 'MISSING'}",
-        f"  tabulate : {'available' if has_tabulate else 'MISSING'} "
-        "(required by df.to_markdown in _extract_tables)",
+        f"  marker   : {'available' if has_marker else 'MISSING'} (PDF parser)",
     ]
     if raw_tables > 0 and md_tables == 0:
         lines.append(
             f"  WARNING: PyMuPDF found {raw_tables} raw table(s), but 0 markdown "
             "table(s) landed in page content."
         )
-        if not has_tabulate:
-            lines.append(
-                "    Cause: 'tabulate' is not installed - _extract_tables() "
-                "silently swallows the ImportError."
-            )
-            lines.append("    Fix  : pip install tabulate")
+        lines.append(
+            "    Note: marker (PDF parser) reconstructs tables internally; if "
+            "they are missing, check the marker output/version."
+        )
     elif raw_tables > 0:
         lines.append(
             f"  OK: {raw_tables} raw table(s) -> {md_tables} page(s) with "

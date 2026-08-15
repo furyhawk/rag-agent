@@ -1,33 +1,66 @@
-"""Smart PDF parser using PyMuPDF.
+"""Smart PDF parser using marker (datalab-to/marker): PDF → markdown.
 
-Features:
-- Text extraction with layout preservation (blocks)
-- Table detection → markdown tables
-- Header/footer detection and removal
-- OCR fallback for scanned pages (optional, via LLM vision)
-- Image extraction for LLM-based description
-- Document metadata (author, title, TOC)
+Marker converts PDFs to clean markdown while handling layout analysis,
+table reconstruction, header/footer removal, image extraction and (optionally)
+OCR internally. This parser adapts marker's paginated markdown output back into
+the per-page ``DocumentPage`` model the rest of the pipeline expects.
+
+Notes
+-----
+- Requires ``pip install marker-pdf`` and its inference prerequisites
+  (PyTorch; a surya VLM backend is only needed when OCR is enabled).
+- Models are downloaded on first use via ``create_model_dict()``.
+- With ``enable_ocr=False`` (default) marker runs pure text-layer extraction
+  (``disable_ocr=True``) — no VLM/inference server is started.
 """
 
 from __future__ import annotations
 
+import asyncio
+import io
 import logging
+import re
+import threading
 from pathlib import Path
 from typing import Any
-
-import pymupdf
 
 from rag_agent.models.document import Document, DocumentImage, DocumentPage
 from rag_agent.parsers.base import BaseDocumentParser
 
 logger = logging.getLogger(__name__)
 
+# Marker's paginate_output inserts "\n\n{PAGE_ID}" + "-"*48 + "\n\n" between pages.
+_PAGE_SEPARATOR = re.compile(r"\n\n\{(\d+)\}-{40,}\n\n")
+# Markdown image reference, e.g. ![](/page/0/Picture/2.png)
+_IMAGE_REF = re.compile(r"!\[[^\]]*\]\(([^)\s]+)\)")
 
-class PyMuPDFParser(BaseDocumentParser):
-    """Smart PDF parser with multi-stage extraction pipeline."""
+# marker's model dict is expensive to build; build once per process.
+_model_dict: dict[str, Any] | None = None
+_model_dict_lock = threading.Lock()
+
+
+def _get_model_dict() -> dict[str, Any]:
+    """Return the shared marker model dict (lazily built, thread-safe)."""
+    global _model_dict
+    if _model_dict is None:
+        with _model_dict_lock:
+            if _model_dict is None:
+                from marker.models import create_model_dict
+
+                _model_dict = create_model_dict()
+    return _model_dict
+
+
+class MarkerPDFParser(BaseDocumentParser):
+    """PDF parser backed by datalab-to/marker (PDF → markdown).
+
+    Marker performs layout analysis, table formatting, header/footer
+    stripping, image extraction and (optionally) OCR internally, so this
+    parser is thin: it runs the converter and splits the paginated markdown
+    back into per-page ``DocumentPage`` objects.
+    """
 
     SUPPORTED_EXTENSIONS = {".pdf"}
-    MIN_TEXT_LENGTH = 50  # below this → likely a scan, try OCR
 
     def __init__(
         self,
@@ -37,146 +70,138 @@ class PyMuPDFParser(BaseDocumentParser):
         self.enable_ocr = enable_ocr
         self._image_describer = image_describer
 
-    def _detect_repeated_content(self, doc: Any) -> set[str]:
-        """Detect headers/footers — text appearing on >70% of pages."""
-        if len(doc) < 3:
-            return set()
-        text_counts: dict[str, int] = {}
-        for page in doc:
-            for b in page.get_text("blocks"):
-                if b[6] != 0:  # skip image blocks
-                    continue
-                y_ratio = b[1] / page.rect.height if page.rect.height else 0
-                if y_ratio < 0.15 or y_ratio > 0.85:
-                    text = b[4].strip()
-                    if text and len(text) < 200:
-                        text_counts[text] = text_counts.get(text, 0) + 1
-        threshold = len(doc) * 0.7
-        return {t for t, c in text_counts.items() if c >= threshold}
+    def _build_converter(self) -> Any:
+        """Create a marker PdfConverter (models are shared process-wide)."""
+        from marker.converters.pdf import PdfConverter
 
-    def _extract_text(self, page: Any, repeated: set[str]) -> str:
-        """Extract text blocks, filtering headers/footers."""
-        texts = []
-        for b in page.get_text("blocks"):
-            if b[6] != 0:  # skip image blocks
-                continue
-            text = b[4].strip()
-            if text and text not in repeated:
-                texts.append(text)
-        return "\n\n".join(texts)
+        config: dict[str, Any] = {
+            "output_format": "markdown",
+            "paginate_output": True,  # emit per-page separators we split on
+            "disable_ocr": not self.enable_ocr,
+            "extract_images": True,
+            "disable_tqdm": True,
+            "pdftext_workers": 1,
+        }
+        return PdfConverter(
+            artifact_dict=_get_model_dict(),
+            config=config,
+        )
 
-    def _extract_tables(self, page: Any) -> str:
-        """Extract tables as markdown."""
-        try:
-            tables = page.find_tables()
-            if not tables or not tables.tables:
-                return ""
-            parts = []
-            for table in tables.tables:
-                df = table.to_pandas()
-                if not df.empty:
-                    parts.append(df.to_markdown(index=False))
-            return "\n\n".join(parts)
-        except Exception:
-            return ""
+    @staticmethod
+    def _split_pages(markdown: str) -> list[tuple[int, str]]:
+        """Split paginated markdown into (1-based page_num, content) pairs."""
+        parts = _PAGE_SEPARATOR.split(markdown)
+        sections: list[tuple[int, str]] = []
+        # parts[0] is any text before the first page marker (usually empty).
+        for i in range(1, len(parts), 2):
+            page_id = int(parts[i])
+            content = parts[i + 1].strip() if i + 1 < len(parts) else ""
+            sections.append((page_id + 1, content))
+        return sections
 
-    def _ocr_page(self, page: Any) -> str:
-        """OCR a scanned page by rendering it as image and sending to LLM vision."""
-        if not self._image_describer:
-            return ""
-        try:
-            import asyncio
+    @staticmethod
+    def _pil_to_document_image(image: Any, page_num: int) -> DocumentImage:
+        """Serialize a marker PIL image into a DocumentImage."""
+        buffer = io.BytesIO()
+        fmt = (image.format or "PNG").upper()
+        if fmt in ("JPEG", "JPG"):
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            image.save(buffer, format="JPEG")
+            mime_type = "image/jpeg"
+        else:
+            image.save(buffer, format="PNG")
+            mime_type = "image/png"
+        width, height = image.size
+        return DocumentImage(
+            page_num=page_num,
+            image_bytes=buffer.getvalue(),
+            mime_type=mime_type,
+            width=width,
+            height=height,
+        )
 
-            pix = page.get_pixmap(dpi=200)
-            image_bytes = pix.tobytes("png")
-            loop = asyncio.new_event_loop()
-            try:
-                return str(
-                    loop.run_until_complete(
-                        self._image_describer.describe(image_bytes, "image/png")
-                    )
+    def _attach_page_images(
+        self,
+        content: str,
+        images: dict[str, Any],
+        page_num: int,
+    ) -> tuple[list[DocumentImage], str]:
+        """Pull images referenced by a page's markdown out of marker's dict.
+
+        Returns ``(page_images, cleaned_content)``. Image markdown references
+        are stripped from the content (images are stored/described separately,
+        matching the pre-marker behavior).
+        """
+        page_images: list[DocumentImage] = []
+
+        def _replace(match: re.Match) -> str:
+            name = match.group(1)
+            image = images.get(name)
+            if image is not None:
+                page_images.append(
+                    self._pil_to_document_image(image, page_num)
                 )
-            finally:
-                loop.close()
-        except Exception as e:
-            logger.warning("LLM OCR failed for page %d: %s", page.number + 1, e)
             return ""
 
-    def _extract_images(self, doc: Any, page: Any) -> list[DocumentImage]:
-        """Extract images from page for LLM description."""
-        images: list[DocumentImage] = []
-        for img_info in page.get_images(full=True):
-            xref = img_info[0]
-            try:
-                base = doc.extract_image(xref)
-                if base and base["image"] and len(base["image"]) > 1000:
-                    ext = base.get("ext", "png")
-                    mime_map = {
-                        "png": "image/png",
-                        "jpeg": "image/jpeg",
-                        "jpg": "image/jpeg",
-                    }
-                    images.append(
-                        DocumentImage(
-                            page_num=page.number + 1,
-                            image_bytes=base["image"],
-                            mime_type=mime_map.get(ext, f"image/{ext}"),
-                        )
-                    )
-            except Exception:
-                pass
-        return images
+        cleaned = _IMAGE_REF.sub(_replace, content)
+        return page_images, cleaned
+
+    @staticmethod
+    def _toc_item(item: Any) -> dict[str, Any]:
+        """Normalize a marker TocItem (pydantic model or dict) to a dict."""
+        if isinstance(item, dict):
+            return {
+                "level": item.get("heading_level"),
+                "title": item.get("title"),
+                "page": (item.get("page_id") or 0) + 1,
+            }
+        return {
+            "level": getattr(item, "heading_level", None),
+            "title": getattr(item, "title", None),
+            "page": (getattr(item, "page_id", 0) or 0) + 1,
+        }
 
     def _parse_pdf_file(self, filepath: Path) -> Document:
-        """Parse PDF with smart extraction pipeline."""
-        doc: Any = pymupdf.open(filepath)
+        """Parse PDF with marker's converter."""
+        from marker.output import text_from_rendered
 
-        # Doc-level metadata
-        meta = doc.metadata or {}
-        toc = doc.get_toc()
+        converter = self._build_converter()
+        rendered = converter(str(filepath))
+        markdown, _, images = text_from_rendered(rendered)
+        metadata = getattr(rendered, "metadata", None) or {}
 
-        # Detect repeated headers/footers
-        repeated = self._detect_repeated_content(doc)
+        sections = self._split_pages(markdown)
+        if not sections and markdown.strip():
+            # No page separators found — treat the whole output as one page.
+            sections = [(1, markdown.strip())]
 
         pages: list[DocumentPage] = []
-        for page in doc:
-            # 1. Text with layout (skip image blocks, filter headers/footers)
-            text = self._extract_text(page, repeated)
-
-            # 2. Tables → markdown
-            tables_md = self._extract_tables(page)
-            if tables_md:
-                text = text + "\n\n" + tables_md if text.strip() else tables_md
-
-            # 3. OCR fallback for scans/empty pages
-            if self.enable_ocr and len(text.strip()) < self.MIN_TEXT_LENGTH:
-                ocr_text = self._ocr_page(page)
-                if len(ocr_text.strip()) > len(text.strip()):
-                    text = ocr_text
-                    logger.info("OCR fallback used for page %d", page.number + 1)
-
-            # 4. Images
-            images = self._extract_images(doc, page)
-
+        for page_num, content in sections:
+            page_images, cleaned = self._attach_page_images(
+                content, images, page_num
+            )
             pages.append(
                 DocumentPage(
-                    page_num=page.number + 1,
-                    content=text,
-                    images=images,
+                    page_num=page_num,
+                    content=cleaned,
+                    images=page_images,
                 )
             )
 
-        doc.close()
-
-        # Enrich metadata
+        # Enrich metadata from marker's output metadata.
         additional: dict[str, Any] = {}
-        if meta.get("title"):
-            additional["pdf_title"] = meta["title"]
-        if meta.get("author"):
-            additional["pdf_author"] = meta["author"]
+        toc = metadata.get("table_of_contents")
         if toc:
-            additional["toc"] = [
-                {"level": t[0], "title": t[1], "page": t[2]} for t in toc[:20]
+            # Marker emits TocItem pydantic models; normalize to dicts.
+            additional["toc"] = [self._toc_item(t) for t in toc[:20]]
+        page_stats = metadata.get("page_stats")
+        if page_stats:
+            additional["page_stats"] = [
+                s.model_dump(mode="json")
+                if hasattr(s, "model_dump")
+                else s
+                for s in page_stats
             ]
 
         doc_meta = self.get_document_metadata(filepath)
@@ -196,6 +221,8 @@ class PyMuPDFParser(BaseDocumentParser):
         """
         if not self.is_extension_allowed(filepath):
             raise ValueError(
-                f"Extension {filepath.suffix} not supported by PyMuPDFParser"
+                f"Extension {filepath.suffix} not supported by MarkerPDFParser"
             )
-        return self._parse_pdf_file(filepath)
+        # Marker conversion is CPU/GPU bound and blocking; run it in a worker
+        # thread so we don't stall the event loop.
+        return await asyncio.to_thread(self._parse_pdf_file, filepath)

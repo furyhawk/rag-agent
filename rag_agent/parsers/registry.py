@@ -6,14 +6,14 @@ from typing import Any
 
 from rag_agent.parsers.base import BaseDocumentParser
 from rag_agent.parsers.docx import DocxDocumentParser
-from rag_agent.parsers.pdf import PyMuPDFParser
+from rag_agent.parsers.pdf import MarkerPDFParser
 from rag_agent.parsers.text import TextDocumentParser
 
 # All available parsers
 _AVAILABLE_PARSERS: list[type[BaseDocumentParser]] = [
     TextDocumentParser,
     DocxDocumentParser,
-    PyMuPDFParser,
+    MarkerPDFParser,
 ]
 
 # Extension → parser class mapping

@@ -7,7 +7,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-# System dependencies for PyMuPDF and other native libs
+# System dependencies for marker (PDF->markdown) and other native libs
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl \

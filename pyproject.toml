@@ -8,7 +8,7 @@ include = ["frontend/**"]
 
 [project]
 name = "verity-rag"
-version = "0.2.0"
+version = "0.2.1"
 description = "Production-grade self-hosted document ingestion and retrieval service"
 authors = [{ name = "furyhawk" }]
 license = { text = "MIT" }
@@ -33,7 +33,7 @@ dependencies = [
     "redis>=5.2",
     "arq>=0.26",
     "pymilvus>=2.5",
-    "pymupdf>=1.25",
+    "marker-pdf>=1.0",
     "python-docx>=1.1",
     "langchain-text-splitters>=0.3",
     "openai>=1.58",
@@ -42,7 +42,6 @@ dependencies = [
     "httpx>=0.28",
     "sse-starlette>=2.1",
     "uv>=0.1.0",  # Python manager for fast dependency installation
-    "tabulate>=0.10.0",
 ]
 
 [project.urls]
@@ -58,6 +57,7 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
     "aiosqlite>=0.22",
+    "pymupdf>=1.25",  # debug/sample-PDF generation only (scripts/debug_inspect_pipeline.py)
 ]
 local-ml = [
     "sentence-transformers>=3.3",

@@ -16,7 +16,7 @@ from rag_agent.core.logging import get_logger
 from rag_agent.models.document import Document, DocumentChunk
 from rag_agent.parsers.base import BaseDocumentParser
 from rag_agent.parsers.docx import DocxDocumentParser
-from rag_agent.parsers.pdf import PyMuPDFParser
+from rag_agent.parsers.pdf import MarkerPDFParser
 from rag_agent.parsers.text import TextDocumentParser
 
 logger = get_logger(__name__)
@@ -40,7 +40,7 @@ class DocumentProcessor:
         # Parsers
         self._text_parser = TextDocumentParser()
         self._docx_parser = DocxDocumentParser()
-        self._pdf_parser = PyMuPDFParser(
+        self._pdf_parser = MarkerPDFParser(
             enable_ocr=settings.enable_ocr,
             image_describer=image_describer,
         )
