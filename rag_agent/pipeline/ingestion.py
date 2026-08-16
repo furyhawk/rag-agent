@@ -54,6 +54,7 @@ class IngestionService:
         embedding_api_key: str | None = None,
         embedding_base_url: str | None = None,
         models_cache_dir: str | None = None,
+        milvus_max_batch_bytes: int | None = None,
         on_event: Callable[..., Awaitable[None]] | None = None,
         progress_callback: ProgressCallback | None = None,
         media_dir: str | None = None,
@@ -72,6 +73,9 @@ class IngestionService:
             milvus_token=milvus_token,
             embedding_dim=settings.embeddings_config.dim,
             embedding_service=embed_service,
+            max_batch_bytes=milvus_max_batch_bytes
+            if milvus_max_batch_bytes is not None
+            else MilvusVectorStore.DEFAULT_MAX_BATCH_BYTES,
         )
         processor = DocumentProcessor(settings=settings)
         return cls(

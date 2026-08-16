@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     valkey_url: str = "redis://localhost:6379/0"
     milvus_uri: str = "http://localhost:19530"
     milvus_token: str = ""
+    # Max estimated payload bytes per Milvus insert request. Keeps each gRPC
+    # message under Milvus's 64 MiB receive limit (default 32 MiB) so large
+    # documents (many chunks) don't fail with RESOURCE_EXHAUSTED.
+    milvus_max_batch_bytes: int = 32 * 1024 * 1024
 
     # ── Embeddings ────────────────────────────────────────────────
     embedding_base_url: str = ""

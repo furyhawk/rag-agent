@@ -19,6 +19,19 @@ from rag_agent.vectorstore.base import BaseVectorStore
 
 logger = get_logger(__name__)
 
+# Milvus (standalone) default gRPC max receive message size is 64 MiB
+# (67108864 bytes). Sending a larger insert in ONE request fails with:
+#   AioRpcError RESOURCE_EXHAUSTED:
+#     "grpc: received message larger than max (<sent> vs. 67108864)"
+# We split inserts so each gRPC message stays well under that ceiling.
+_MILVUS_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+# Default per-insert byte budget (~half the server limit, leaves headroom for
+# gRPC framing, base64/varint overhead and other fields in the request).
+DEFAULT_MAX_BATCH_BYTES = 32 * 1024 * 1024
+# Estimated per-row serialization overhead (ids, field names, JSON wrapper,
+# float packing padding, etc.) beyond the content + vector bytes themselves.
+_ROW_OVERHEAD_BYTES = 512
+
 
 class MilvusVectorStore(BaseVectorStore):
     """Milvus vector store using AsyncMilvusClient.
@@ -31,15 +44,27 @@ class MilvusVectorStore(BaseVectorStore):
     - metadata: JSON
     """
 
+    # Default per-insert byte budget (kept as a class attribute so callers
+    # like IngestionService.build can reference it without importing the
+    # module-level constant).
+    DEFAULT_MAX_BATCH_BYTES = DEFAULT_MAX_BATCH_BYTES
+
     def __init__(
         self,
         milvus_uri: str,
         milvus_token: str,
         embedding_dim: int,
         embedding_service: EmbeddingService,
+        max_batch_bytes: int = DEFAULT_MAX_BATCH_BYTES,
     ) -> None:
         self._embedding_dim = embedding_dim
         self._embedder = embedding_service
+        # Clamp the per-batch byte budget to [1 MiB, server max) so a mis-set
+        # value can never push a single insert past the 64 MiB server limit.
+        self._max_batch_bytes = min(
+            max(max_batch_bytes, 1024 * 1024),
+            _MILVUS_MAX_MESSAGE_BYTES,
+        )
         self._client = AsyncMilvusClient(
             uri=milvus_uri, token=milvus_token or None
         )
@@ -95,6 +120,7 @@ class MilvusVectorStore(BaseVectorStore):
             collection=collection_name,
             chunks=len(document.chunks),
             dim=self._embedding_dim,
+            max_batch_bytes=self._max_batch_bytes,
         )
 
         vectors = self._embedder.embed_document(document)
@@ -108,14 +134,63 @@ class MilvusVectorStore(BaseVectorStore):
             }
             for i, chunk in enumerate(document.chunks)
         ]
-        await self._client.insert(collection_name, data=data)
-        await self._client.flush(collection_name)
+
+        # Send rows in batches that each stay well under Milvus's 64 MiB gRPC
+        # receive limit. A single giant insert for a large document trips
+        # RESOURCE_EXHAUSTED: "grpc: received message larger than max".
+        batches = self._split_batches(data)
+        for i, batch in enumerate(batches, start=1):
+            logger.info(
+                "milvus.insert_batch",
+                collection=collection_name,
+                batch=i,
+                total_batches=len(batches),
+                rows=len(batch),
+            )
+            await self._client.insert(collection_name, data=batch)
+            # Flush per batch so data already sent survives a later failure.
+            await self._client.flush(collection_name)
 
         logger.info(
             "milvus.flushed",
             collection=collection_name,
             chunks=len(data),
+            batches=len(batches),
         )
+
+    def _split_batches(self, data: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+        """Split insert rows into batches bounded by estimated message bytes.
+
+        The estimate is per-row: vector bytes (dim * 4 for float32) + content
+        length + JSON metadata approximation + fixed overhead. Keeping the
+        cumulative total under ``self._max_batch_bytes`` ensures the gRPC
+        request never exceeds the Milvus server's max receive message size,
+        regardless of embedding dimension or chunk content length.
+        """
+        batches: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
+        current_bytes = 0
+
+        for row in data:
+            content = row.get("content") or ""
+            vector = row.get("vector") or []
+            # ~len(str(metadata)) is a cheap upper-bound stand-in for the JSON.
+            row_bytes = (
+                len(content)
+                + len(vector) * 4
+                + len(str(row.get("metadata") or {}))
+                + _ROW_OVERHEAD_BYTES
+            )
+            if current and current_bytes + row_bytes > self._max_batch_bytes:
+                batches.append(current)
+                current = []
+                current_bytes = 0
+            current.append(row)
+            current_bytes += row_bytes
+
+        if current:
+            batches.append(current)
+        return batches
 
     async def search(
         self,

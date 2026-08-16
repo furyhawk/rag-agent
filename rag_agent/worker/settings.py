@@ -82,6 +82,7 @@ async def process_document(
                 embedding_api_key=settings.embedding_api_key or "",
                 embedding_base_url=settings.embedding_base_url or "",
                 models_cache_dir=str(settings.models_cache_dir),
+                milvus_max_batch_bytes=settings.milvus_max_batch_bytes,
                 media_dir=settings.media_dir,
             )
 

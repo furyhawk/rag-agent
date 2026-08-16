@@ -34,6 +34,7 @@ async def get_vector_store(settings: SettingsDep) -> BaseVectorStore:
         milvus_token=settings.milvus_token,
         embedding_dim=settings.embedding_dim,
         embedding_service=embed_service,
+        max_batch_bytes=settings.milvus_max_batch_bytes,
     )
 
 

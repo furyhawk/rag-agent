@@ -214,6 +214,11 @@ Key settings:
 - `EMBEDDING_BASE_URL` — OpenAI-compatible embedding endpoint
 - `EMBEDDING_MODEL` — Model name (e.g., `all-MiniLM-L6-v2`)
 - `MILVUS_URI` — Milvus connection
+- `MILVUS_MAX_BATCH_BYTES` — Max estimated payload per Milvus insert request
+  (default `33554432` = 32 MiB). Inserts are split into batches this size so a
+  large document (many chunks) never exceeds Milvus's 64 MiB gRPC receive
+  limit, which otherwise fails with
+  `AioRpcError RESOURCE_EXHAUSTED: grpc: received message larger than max`.
 - `CHUNK_SIZE`, `CHUNK_OVERLAP` — Text chunking
 - `ENABLE_HYBRID_SEARCH` — BM25 + vector fusion
 - `ENABLE_IMAGE_DESCRIPTION` — LLM vision for images (searchable descriptions)
