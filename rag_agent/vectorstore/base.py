@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from abc import ABC, abstractmethod
 from typing import Any
@@ -13,6 +14,100 @@ from rag_agent.models.search import SearchResult
 
 _COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,63}$")
 _RESERVED_COLLECTION_NAMES = frozenset({"all"})
+
+# Milvus JSON field max length (from the server) is 65536. Cap the serialized
+# chunk metadata well below that, leaving headroom for gRPC/JSON escaping.
+MAX_METADATA_JSON_LENGTH = 60000
+# Long string values in metadata are truncated to this many chars.
+_MAX_METADATA_STRING_LENGTH = 500
+
+
+def _truncate_strings(obj: Any, max_len: int = _MAX_METADATA_STRING_LENGTH) -> None:
+    """Recursively truncate over-long string values in a dict/list tree."""
+    if isinstance(obj, dict):
+        for key, value in list(obj.items()):
+            if isinstance(value, str):
+                if len(value) > max_len:
+                    obj[key] = value[:max_len] + "..."
+            elif isinstance(value, (dict, list)):
+                _truncate_strings(value, max_len)
+    elif isinstance(obj, list):
+        for i, value in enumerate(obj):
+            if isinstance(value, str):
+                if len(value) > max_len:
+                    obj[i] = value[:max_len] + "..."
+            elif isinstance(value, (dict, list)):
+                _truncate_strings(value, max_len)
+
+
+def _metadata_size(meta: dict[str, Any]) -> int:
+    """UTF-8 byte length of the JSON-serialized metadata."""
+    return len(json.dumps(meta, default=str, ensure_ascii=False).encode("utf-8"))
+
+
+def _chunk_additional_info(
+    additional_info: Any, page_num: int
+) -> dict[str, Any] | None:
+    """Trim document-level additional_info down to the chunk's own page.
+
+    marker's ``page_stats`` is a list of ALL pages' stats; carrying the
+    whole list into every chunk's metadata blows past Milvus's JSON length
+    limit. Keep the (small) ToC but replace ``page_stats`` with just this
+    chunk's page entry.
+    """
+    if not isinstance(additional_info, dict):
+        return None
+
+    info = dict(additional_info)
+    page_stats = info.get("page_stats")
+    if isinstance(page_stats, list):
+        target_id = page_num - 1  # marker page_id is 0-based
+        own = next(
+            (
+                s
+                for s in page_stats
+                if isinstance(s, dict) and s.get("page_id") == target_id
+            ),
+            None,
+        )
+        if own is None and 0 <= target_id < len(page_stats):
+            own = page_stats[target_id]
+        if own is not None:
+            info["page_stats"] = own
+        else:
+            info.pop("page_stats", None)
+    return info
+
+
+def _cap_metadata_size(
+    meta: dict[str, Any],
+    limit: int = MAX_METADATA_JSON_LENGTH,
+) -> dict[str, Any]:
+    """Guarantee the serialized metadata stays under Milvus's JSON limit.
+
+    Progressive fallbacks: drop heavyweight document-level keys -> truncate
+    long strings -> drop ``additional_info`` entirely. ``meta`` is mutated
+    in place and returned.
+    """
+    if _metadata_size(meta) <= limit:
+        return meta
+
+    # 1) Drop heavyweight document-level keys from additional_info.
+    info = meta.get("additional_info")
+    if isinstance(info, dict):
+        for key in ("page_stats", "toc"):
+            info.pop(key, None)
+        if _metadata_size(meta) <= limit:
+            return meta
+
+    # 2) Truncate over-long string values anywhere in the tree.
+    _truncate_strings(meta)
+    if _metadata_size(meta) <= limit:
+        return meta
+
+    # 3) Last resort: drop additional_info entirely.
+    meta.pop("additional_info", None)
+    return meta
 
 
 class BaseVectorStore(ABC):
@@ -100,12 +195,20 @@ class BaseVectorStore(ABC):
 
         Extracted images are referenced (id + display info, not bytes) so
         search results can surface and serve them to the user.
+
+        The result is capped to stay under Milvus's JSON field max length
+        (65536). Document-level ``additional_info`` (e.g. marker's
+        ``page_stats`` for EVERY page) is trimmed to only the chunk's own
+        page, so a large PDF doesn't embed a multi-hundred-KB blob into each
+        row (which previously failed with:
+        ``MilvusException: the length (108621) of json field (metadata)
+        exceeds max length (65536)``).
         """
         image_meta: list[dict[str, Any]] = []
         for img in chunk.images:
             description = (img.description or "").strip()
-            if len(description) > 500:
-                description = description[:500] + "..."
+            if len(description) > _MAX_METADATA_STRING_LENGTH:
+                description = description[:_MAX_METADATA_STRING_LENGTH] + "..."
             image_meta.append(
                 {
                     "image_id": img.image_id,
@@ -116,15 +219,21 @@ class BaseVectorStore(ABC):
                     "description": description,
                 }
             )
+
+        doc_meta = document.metadata.model_dump()
+        doc_meta["additional_info"] = _chunk_additional_info(
+            doc_meta.get("additional_info"), chunk.page_num
+        )
+
         meta = {
             "page_num": chunk.page_num,
             "chunk_num": chunk.chunk_num,
             "has_images": bool(chunk.images),
             "image_count": len(chunk.images),
             "images": image_meta,
-            **document.metadata.model_dump(),
+            **doc_meta,
         }
-        return meta
+        return _cap_metadata_size(meta)
 
     @staticmethod
     def sanitize_id(document_id: str) -> str:
