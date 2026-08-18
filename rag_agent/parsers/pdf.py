@@ -12,6 +12,10 @@ Notes
 - Models are downloaded on first use via ``create_model_dict()``.
 - With ``enable_ocr=False`` (default) marker runs pure text-layer extraction
   (``disable_ocr=True``) — no VLM/inference server is started.
+- Marker downloads ``GoNotoCurrent-Regular.ttf`` from ``models.datalab.to`` on
+  first use. We vendor a copy in ``./fonts`` and point ``FONT_PATH`` at it so
+  PDF parsing works in offline/air-gapped containers (see
+  ``rag_agent/parsers/fonts/README.md``).
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 import re
 import threading
 from pathlib import Path
@@ -28,6 +33,18 @@ from rag_agent.models.document import Document, DocumentImage, DocumentPage
 from rag_agent.parsers.base import BaseDocumentParser
 
 logger = logging.getLogger(__name__)
+
+# ── Offline font for marker ─────────────────────────────────────────────
+# marker's BaseConverter.__init__ calls marker.util.download_font() whenever
+# settings.FONT_PATH is missing, which downloads GoNotoCurrent-Regular.ttf from
+# models.datalab.to. In containers with egress/DNS blocked that download fails
+# and every PDF conversion aborts. The env var must be set *before* marker's
+# settings module is imported (marker's Settings is a pydantic BaseSettings and
+# reads FONT_PATH from the environment). We only set it when the vendored font
+# is actually present so we fall back to marker's normal behaviour otherwise.
+_FONT_FILE = Path(__file__).resolve().parent / "fonts" / "GoNotoCurrent-Regular.ttf"
+if _FONT_FILE.exists():
+    os.environ.setdefault("FONT_PATH", str(_FONT_FILE))
 
 # Marker's paginate_output inserts "\n\n{PAGE_ID}" + "-"*48 + "\n\n" between pages.
 _PAGE_SEPARATOR = re.compile(r"\n\n\{(\d+)\}-{40,}\n\n")
