@@ -34,6 +34,7 @@ dependencies = [
     "arq>=0.26",
     "pymilvus>=2.5",
     "marker-pdf>=1.0",
+    "anthropic>=1.0.0",  # forced >=1 by [tool.uv] override; marker-pdf pins <1
     "python-docx>=1.1",
     "langchain-text-splitters>=0.3",
     "openai>=1.58",
@@ -66,3 +67,10 @@ local-ml = [
     "Pillow>=10.0",
     "peft>=0.14",
 ]
+
+[tool.uv]
+# marker-pdf 2.x pins anthropic<1 for its optional Claude LLM service, but this
+# project requires anthropic>=1.0.0. The project never uses marker's Claude
+# service (PdfConverter runs without use_llm), so overriding the upper bound is
+# safe. See https://github.com/anthropics/anthropic-sdk-python/blob/main/MIGRATION.md
+override-dependencies = ["anthropic>=1.0.0"]
