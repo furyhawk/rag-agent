@@ -20,6 +20,16 @@ from rag_agent.models.document import Document
 
 logger = get_logger(__name__)
 
+# jina-embeddings-v5-omni-* models advertise the new "backend: tokenizers"
+# tokenizer config (``tokenizer_class="TokenizersBackend"``), which
+# transformers < 5 cannot resolve. Loading the model then fails with:
+#   ValueError: Tokenizer class TokenizersBackend does not exist or is not
+#   currently imported.
+# ``_patch_tokenizer_backend_resolution`` registers a fallback so AutoTokenizer
+# loads the repo's tokenizer.json as a fast tokenizer instead. It is a no-op on
+# transformers >= 5 (which resolve the class natively).
+_TOKENIZER_BACKEND_PATCHED = False
+
 
 class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
     """Embedding provider using jinaai/jina-embeddings-v5-omni-nano.
@@ -51,6 +61,38 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
             or "triton.knobs.build.impl" in msg
         )
 
+    @staticmethod
+    def _patch_tokenizer_backend_resolution() -> None:
+        """Make ``AutoTokenizer`` resolve ``TokenizersBackend`` on transformers < 5.
+
+        transformers 4.x resolves the ``tokenizer_class`` from its own registry
+        and cannot find the model's ``TokenizersBackend`` class (introduced in
+        the newer "backend: tokenizers" config format). Wrapping
+        ``tokenizer_class_from_name`` with a fallback lets the repo's
+        ``tokenizer.json`` load as a ``PreTrainedTokenizerFast``. Idempotent and
+        best-effort: safe to call from every process that loads the model.
+        """
+        global _TOKENIZER_BACKEND_PATCHED
+        if _TOKENIZER_BACKEND_PATCHED:
+            return
+        try:
+            from transformers.models.auto import tokenization_auto
+        except Exception:
+            return
+
+        _orig = tokenization_auto.tokenizer_class_from_name
+
+        def _patched(class_name: str) -> Any:
+            cls = _orig(class_name)
+            if cls is None and class_name in ("TokenizersBackend", "TokenizersBackendFast"):
+                from transformers import PreTrainedTokenizerFast
+
+                return PreTrainedTokenizerFast
+            return cls
+
+        tokenization_auto.tokenizer_class_from_name = _patched
+        _TOKENIZER_BACKEND_PATCHED = True
+
     def _load_model(self, device: str | None = None) -> Any:
         try:
             from sentence_transformers import SentenceTransformer
@@ -59,6 +101,7 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
                 "Local omni embeddings require sentence-transformers and peft. "
                 "Install with: pip install 'verity-rag[local-ml]'"
             ) from exc
+        self._patch_tokenizer_backend_resolution()
         logger.info(
             "embedding.omni.load",
             model=self.model_name,
