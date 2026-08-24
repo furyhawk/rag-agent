@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import threading
+import types
 from pathlib import Path
 from typing import Any
 
@@ -56,15 +57,67 @@ _model_dict: dict[str, Any] | None = None
 _model_dict_lock = threading.Lock()
 
 
+class _NoopOCRErrorModel:
+    """OCR-disabled stand-in for surya's ``OCRErrorPredictor``.
+
+    marker's ``LineBuilder`` always runs OCR-error detection. With OCR disabled
+    every page reports ``'good'`` (no re-OCR needed), so the PDF's own text
+    layer is used. This lets the pipeline run without loading surya's OCR
+    models, which are incompatible with transformers 4.57.6
+    (``KeyError: 'encoder'`` / ``get_text_config()`` ambiguity).
+    """
+
+    disable_tqdm = False
+
+    def __call__(self, page_texts, batch_size=0):
+        return types.SimpleNamespace(labels=["good"] * len(page_texts))
+
+
+class _NoopRecognitionModel:
+    """OCR-disabled stand-in for surya's ``RecognitionPredictor``.
+
+    The table processor re-OCRs tables that pdftext could not extract; an empty
+    ``text_lines`` result keeps it working (those tables simply keep no OCR
+    cells). The real model is only needed when OCR is enabled.
+    """
+
+    disable_tqdm = False
+
+    def __call__(self, images, *args, **kwargs):
+        return [types.SimpleNamespace(text_lines=[]) for _ in images]
+
+
 def _get_model_dict() -> dict[str, Any]:
-    """Return the shared marker model dict (lazily built, thread-safe)."""
+    """Return the shared marker model dict (lazily built, thread-safe).
+
+    OCR is disabled for this deployment (``enable_ocr=False``), so surya's OCR
+    models (recognition / ocr_error) are not needed for inference and are
+    replaced with no-op stubs. Loading them fails on transformers 4.57.6 with
+    ``KeyError: 'encoder'`` (``SuryaOCRConfig`` pops ``encoder``/``decoder``
+    unconditionally and cannot be no-arg instantiated), which broke every PDF
+    ingest. If OCR is ever enabled, the real models must be loaded instead.
+    """
     global _model_dict
     if _model_dict is None:
         with _model_dict_lock:
             if _model_dict is None:
-                from marker.models import create_model_dict
+                from marker.models import (
+                    LayoutPredictor,
+                    TexifyPredictor,
+                    TableRecPredictor,
+                    DetectionPredictor,
+                    InlineDetectionPredictor,
+                )
 
-                _model_dict = create_model_dict()
+                _model_dict = {
+                    "layout_model": LayoutPredictor(),
+                    "texify_model": TexifyPredictor(),
+                    "recognition_model": _NoopRecognitionModel(),
+                    "table_rec_model": TableRecPredictor(),
+                    "detection_model": DetectionPredictor(),
+                    "inline_detection_model": InlineDetectionPredictor(),
+                    "ocr_error_model": _NoopOCRErrorModel(),
+                }
     return _model_dict
 
 

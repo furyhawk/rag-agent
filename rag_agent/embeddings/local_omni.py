@@ -222,12 +222,25 @@ class LocalOmniEmbeddingProvider(BaseEmbeddingProvider):
             if chunk.images:
                 pil_images = self._load_images(chunk.images)
                 if pil_images:
-                    # Fused multimodal embedding: text + first image
-                    emb = self._with_triton_fallback(
-                        lambda: self.model.encode_document(
-                            (chunk_text, pil_images[0])
+                    # Fused multimodal embedding: text + first image. On
+                    # transformers < 5 the omni image processor cannot be built
+                    # (``self.processor`` is None), so fall back to text-only so
+                    # image-heavy documents still index.
+                    try:
+                        emb = self._with_triton_fallback(
+                            lambda: self.model.encode_document(
+                                (chunk_text, pil_images[0])
+                            )
                         )
-                    )
+                    except Exception:
+                        logger.warning(
+                            "embedding.omni.image_fusion_fallback",
+                            model=self.model_name,
+                            chunk_id=getattr(chunk, "chunk_id", None),
+                        )
+                        emb = self._with_triton_fallback(
+                            lambda: self.model.encode_document(chunk_text)
+                        )
                 else:
                     emb = self._with_triton_fallback(
                         lambda: self.model.encode_document(chunk_text)
