@@ -1,4 +1,5 @@
 """Simple functional test of document upload route handler (without full server)."""
+import asyncio
 import tempfile
 from pathlib import Path
 from rag_agent.core.config import Settings
@@ -19,8 +20,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     storage = LocalFileStorage(settings.media_dir)
     test_content = b"Test document content"
 
-    # Simulate what upload route does
-    storage_path = storage.save("test.txt", test_content, "documents")
+    # Simulate what upload route does (save is async)
+    storage_path = asyncio.run(storage.save("test.txt", test_content, "documents"))
 
     print(f"✓ File saved to: {storage_path}")
     print(f"✓ File exists: {storage_path.exists()}")
