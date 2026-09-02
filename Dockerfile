@@ -5,7 +5,9 @@ ARG INSTALL_LOCAL_ML=false
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    CC=gcc \
+    CXX=g++
 
 # System dependencies for marker (PDF->markdown) and other native libs
 RUN apt-get update && \
@@ -13,6 +15,19 @@ RUN apt-get update && \
         curl \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
+
+# A C toolchain is required by Triton at runtime: torch JIT-compiles CUDA
+# attention kernels on first use, and Triton shells out to the C compiler
+# (CC -> clang -> gcc). Without it, local-ml + GPU fails with:
+#   "Failed to find C compiler. Please specify via CC environment variable
+#    or set triton.knobs.build.impl."
+# Installed only when local-ml is enabled to keep the default image lean.
+RUN if [ "$INSTALL_LOCAL_ML" = "true" ]; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            build-essential \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 WORKDIR /app
 

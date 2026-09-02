@@ -277,6 +277,33 @@ result = await client.upload_document("report.pdf")
 results = await client.search("quarterly earnings")
 ```
 
+## Troubleshooting
+
+### "Failed to find C compiler ... triton.knobs.build.impl"
+
+When local-ml models run on CUDA (`make up-local-ml-full GPU=1`), torch
+JIT-compiles attention kernels with Triton, which shells out to a C compiler
+(`CC` → `clang` → `gcc`). On a host or container without a C toolchain this
+fails at runtime with:
+
+```
+Failed to find C compiler. Please specify via CC environment variable or set triton.knobs.build.impl.
+```
+
+The container image installs `build-essential` (gcc/clang/make) automatically
+when the `local-ml` profile is enabled (`INSTALL_LOCAL_ML=true`), so the Docker
+stack is covered. If you hit this outside Docker (e.g. `make dev-fast` on a bare
+host), install a C compiler first, e.g. on Debian/Ubuntu:
+
+```bash
+sudo apt-get install -y build-essential
+```
+
+or ensure `CC`/`CXX` point at an available compiler (e.g. `export CC=gcc CXX=g++`).
+The app also retries on CPU automatically when this Triton error is detected
+(embeddings and cross-encoder reranker), so search keeps working even without a
+C toolchain — but it runs slower on CPU.
+
 ## Requirements
 
 - **uv** (https://github.com/astral-sh/uv) — Modern Python package installer and resolver
