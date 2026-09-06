@@ -82,6 +82,10 @@ services:
       - CROSS_ENCODER_MODEL=${CROSS_ENCODER_MODEL:-cross-encoder/ms-marco-MiniLM-L6-v2}
       - HF_TOKEN=${HF_TOKEN:-}
       - WORKER_JOB_TIMEOUT=${WORKER_JOB_TIMEOUT:-4800}
+      - WORKER_MAX_JOBS=${WORKER_MAX_JOBS:-4}
+      - WORKER_MAX_TRIES=${WORKER_MAX_TRIES:-1}
+      - WORKER_RETRY_JOBS=${WORKER_RETRY_JOBS:-false}
+      - WORKER_RUN_IN_SUBPROCESS=${WORKER_RUN_IN_SUBPROCESS:-true}
       - LOG_FORMAT=${LOG_FORMAT:-json}
       - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
       - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
@@ -97,6 +101,12 @@ services:
         condition: service_healthy
       milvus:
         condition: service_started
+    # Hard cap on the worker's RAM. In subprocess mode each document runs in a
+    # child of this container, so exceeding the cap OOM-kills just that child
+    # (the job errors and its memory is reclaimed) instead of the worker
+    # pinning peak RSS and starving the host. `restart: unless-stopped` below
+    # brings the container back if the OOM killer ever targets the worker.
+    mem_limit: ${WORKER_MEM_LIMIT:-16g}
     restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────────

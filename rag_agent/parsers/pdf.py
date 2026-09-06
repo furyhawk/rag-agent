@@ -121,6 +121,21 @@ def _get_model_dict() -> dict[str, Any]:
     return _model_dict
 
 
+def release_models() -> None:
+    """Release the process-global marker model dict so RAM can be reclaimed.
+
+    Marker's surya models (layout/detection/inline-detection/table-rec/texify)
+    are cached in a module global for reuse across parses. In long-lived
+    processes (the ARQ worker) that keeps them resident forever and pins RSS at
+    its peak after the first heavy PDF. Dropping the reference lets the models
+    be garbage-collected between jobs; they are lazily reloaded on the next
+    parse. Safe to call when models were never loaded.
+    """
+    global _model_dict
+    with _model_dict_lock:
+        _model_dict = None
+
+
 class MarkerPDFParser(BaseDocumentParser):
     """PDF parser backed by datalab-to/marker (PDF → markdown).
 

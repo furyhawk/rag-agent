@@ -117,6 +117,16 @@ class Settings(BaseSettings):
     # ── Worker ───────────────────────────────────────────────────
     worker_job_timeout: int = 4800  # seconds per ARQ job (Milvus flush can be slow)
     worker_max_jobs: int = 4  # max concurrent jobs per ARQ worker
+    # A document that exceeds the job timeout is NOT a transient failure —
+    # ARQ re-running it just re-peaks memory (each attempt can take 90+ min on
+    # big books). Disable auto-retry by default (still overridable).
+    worker_max_tries: int = 1
+    worker_retry_jobs: bool = False
+    # Run each document's heavy parse/embed/insert in a *killable subprocess*
+    # so its memory is returned to the OS when the job finishes, is cancelled
+    # on the ARQ job_timeout, or is OOM-killed by the container memory limit —
+    # instead of the long-lived ARQ worker pinning peak RSS forever.
+    worker_run_in_subprocess: bool = True
 
     # ── Server ───────────────────────────────────────────────────
     host: str = "0.0.0.0"

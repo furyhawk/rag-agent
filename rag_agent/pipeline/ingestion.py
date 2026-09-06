@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from rag_agent.core.config import RAGSettings
+from rag_agent.core.config import RAGSettings, Settings
 from rag_agent.core.logging import get_logger
 from rag_agent.embeddings.service import EmbeddingService
 from rag_agent.models.ingestion import IngestionResult, IngestionStatus
@@ -300,3 +300,22 @@ class IngestionService:
                 "ingest.delete_failed", document_id=document_id, error=str(e)
             )
             return False
+
+
+def build_ingestion_service(settings: Settings) -> IngestionService:
+    """Build an ``IngestionService`` from the app-level ``Settings``.
+
+    Shared by the ARQ worker and the subprocess job runner so the heavy
+    parse/embed/insert pipeline is always constructed identically from the
+    same environment configuration.
+    """
+    return IngestionService.build(
+        settings=settings.rag,
+        milvus_uri=settings.milvus_uri,
+        milvus_token=settings.milvus_token or "",
+        embedding_api_key=settings.embedding_api_key or "",
+        embedding_base_url=settings.embedding_base_url or "",
+        models_cache_dir=str(settings.models_cache_dir),
+        milvus_max_batch_bytes=settings.milvus_max_batch_bytes,
+        media_dir=settings.media_dir,
+    )
