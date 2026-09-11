@@ -165,6 +165,27 @@ async def _run_ingestion_in_subprocess(
                 pass
 
 
+def _create_worker_engine():
+    """Create the ARQ worker's async engine.
+
+    ``pool_pre_ping`` validates a pooled connection on checkout and
+    transparently replaces one that Postgres or the network already dropped;
+    ``pool_recycle`` proactively refreshes long-lived connections. Both matter
+    here because an ingest job can keep the worker busy — and its connections
+    idle — for up to ``job_timeout`` (an hour by default). Without them a stale
+    connection is handed to the next statement and raises
+    ``InterfaceError: connection is closed`` (see ``core.database``, which
+    already sets ``pool_pre_ping`` for the API).
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    return create_async_engine(
+        get_settings().database_url,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+    )
+
+
 async def process_document(
     ctx: dict,
     doc_id: str,
@@ -184,123 +205,159 @@ async def process_document(
     Returns:
         dict with status and document_id.
     """
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.orm import sessionmaker
+
     from rag_agent.core.config import get_settings
     from rag_agent.db.models import TrackedDocument
     from rag_agent.models.ingestion import IngestionResult
 
     settings = get_settings()
 
-    # Create async engine and session
-    engine = create_async_engine(settings.database_url)
+    engine = _create_worker_engine()
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    async with async_session() as session:
-        try:
-            # Update status to processing
-            doc = await session.get(TrackedDocument, doc_id)
-            if not doc:
-                logger.error("Document not found: %s", doc_id)
-                return {"status": "error", "message": f"Document {doc_id} not found"}
+    async def _write_status(
+        *,
+        status: str,
+        error_message: str | None = None,
+        vector_document_id: str | None = None,
+        chunk_count: int | None = None,
+        mark_completed: bool = False,
+    ) -> bool:
+        """Write a document's status on a fresh, short-lived session.
 
-            doc.status = "processing"
-            await session.commit()
-            logger.info("Processing document: %s (%s)", filename, doc_id)
-
-            # Run the heavy parse/embed/insert work. By default it runs in a
-            # killable subprocess so its memory is reclaimed when the job
-            # ends. If subprocess mode is disabled it runs in-process and the
-            # ML models are torn down between jobs to avoid ratcheting RSS.
-            if settings.worker_run_in_subprocess:
-                result: IngestionResult = await _run_ingestion_in_subprocess(
-                    doc_id=doc_id,
-                    collection_name=collection_name,
-                    storage_path=storage_path,
-                    filename=filename,
-                )
-            else:
-                # NOTE: importing the ingestion pipeline pulls in the heavy ML
-                # stack (torch/sentence-transformers/marker). It is imported
-                # ONLY in this in-process branch so the long-lived ARQ parent
-                # stays small in subprocess mode (the default).
-                from rag_agent.pipeline.ingestion import build_ingestion_service
-
-                ingestion = build_ingestion_service(settings)
-                try:
-                    result = await ingestion.ingest_file(
-                        filepath=Path(storage_path),
-                        collection_name=collection_name,
-                        replace=True,
-                        source_path=storage_path,
-                    )
-                finally:
-                    _release_ml_memory()
-
-            # Update document status
-            if result.status.value == "done":
-                doc.status = "done"
-                doc.vector_document_id = result.document_id
-                doc.chunk_count = result.chunk_count
-                doc.completed_at = doc.created_at
-                logger.info(
-                    "Document processed successfully: %s, chunks: %d",
-                    doc_id,
-                    result.chunk_count,
-                )
-            else:
-                doc.status = "error"
-                detailed_error = result.error_message or result.message
-                doc.error_message = detailed_error
-                logger.error(
-                    "Document processing failed: %s - %s",
-                    doc_id,
-                    detailed_error,
-                )
-
-            await session.commit()
-
-            return {
-                "status": result.status.value,
-                "document_id": result.document_id,
-                "chunk_count": result.chunk_count,
-                "message": result.message,
-            }
-
-        except (Exception, asyncio.CancelledError) as e:
-            # Catch asyncio.CancelledError (raised by ARQ on job timeout) so the
-            # document status is always recorded instead of getting stuck in "processing".
-            is_timeout = isinstance(e, (TimeoutError, asyncio.CancelledError))
-            if is_timeout:
-                logger.error(
-                    "Document %s timed out after %ds: %s",
-                    doc_id, settings.worker_job_timeout, filename,
-                )
-            else:
-                logger.exception("Unexpected error processing document %s: %s", doc_id, e)
-            # Try to update status to error (use a fresh session in case the
-            # current one was left in a bad state by the cancellation).
+        Each call opens and closes its own session, so no connection is held
+        across the long-running ingest. Retries once on a dropped connection:
+        ``pool_pre_ping`` catches most stale connections at checkout, but one
+        can still die between checkout and commit (e.g. the database restarted
+        mid-job).
+        """
+        for attempt in range(2):
             try:
-                err_engine = create_async_engine(settings.database_url)
-                err_session = sessionmaker(
-                    err_engine, class_=AsyncSession, expire_on_commit=False
-                )
-                async with err_session() as es:
-                    doc = await es.get(TrackedDocument, doc_id)
-                    if doc:
-                        doc.status = "error"
-                        doc.error_message = (
-                            f"Timeout after {settings.worker_job_timeout}s"
-                            if is_timeout
-                            else str(e)
-                        )
-                        await es.commit()
-                await err_engine.dispose()
+                async with async_session() as session:
+                    doc = await session.get(TrackedDocument, doc_id)
+                    if doc is None:
+                        return False
+                    doc.status = status
+                    if error_message is not None:
+                        doc.error_message = error_message
+                    if vector_document_id is not None:
+                        doc.vector_document_id = vector_document_id
+                    if chunk_count is not None:
+                        doc.chunk_count = chunk_count
+                    if mark_completed:
+                        doc.completed_at = doc.created_at
+                    await session.commit()
+                return True
             except Exception:
-                pass
-            return {"status": "error", "message": str(e)}
-        finally:
-            await engine.dispose()
+                if attempt == 1:
+                    raise
+                logger.warning(
+                    "status write failed, retrying on a fresh connection",
+                    doc_id=doc_id,
+                    status=status,
+                    exc_info=True,
+                )
+        return False
+
+    try:
+        # Mark the document as processing, then CLOSE the session before the
+        # heavy work starts. Holding a session/connection open across an ingest
+        # that can run for up to ``job_timeout`` (an hour by default) leaves it
+        # idle long enough for Postgres or the network to close it, which then
+        # breaks the final status write with "connection is closed".
+        if not await _write_status(status="processing"):
+            logger.error("Document not found: %s", doc_id)
+            return {"status": "error", "message": f"Document {doc_id} not found"}
+        logger.info("Processing document: %s (%s)", filename, doc_id)
+
+        # Run the heavy parse/embed/insert work. By default it runs in a
+        # killable subprocess so its memory is reclaimed when the job ends.
+        # If subprocess mode is disabled it runs in-process and the ML models
+        # are torn down between jobs to avoid ratcheting RSS.
+        if settings.worker_run_in_subprocess:
+            result: IngestionResult = await _run_ingestion_in_subprocess(
+                doc_id=doc_id,
+                collection_name=collection_name,
+                storage_path=storage_path,
+                filename=filename,
+            )
+        else:
+            # NOTE: importing the ingestion pipeline pulls in the heavy ML
+            # stack (torch/sentence-transformers/marker). It is imported ONLY
+            # in this in-process branch so the long-lived ARQ parent stays
+            # small in subprocess mode (the default).
+            from rag_agent.pipeline.ingestion import build_ingestion_service
+
+            ingestion = build_ingestion_service(settings)
+            try:
+                result = await ingestion.ingest_file(
+                    filepath=Path(storage_path),
+                    collection_name=collection_name,
+                    replace=True,
+                    source_path=storage_path,
+                )
+            finally:
+                _release_ml_memory()
+
+        # Update document status on a fresh connection.
+        if result.status.value == "done":
+            await _write_status(
+                status="done",
+                vector_document_id=result.document_id,
+                chunk_count=result.chunk_count,
+                mark_completed=True,
+            )
+            logger.info(
+                "Document processed successfully: %s, chunks: %d",
+                doc_id,
+                result.chunk_count,
+            )
+        else:
+            detailed_error = result.error_message or result.message
+            await _write_status(status="error", error_message=detailed_error)
+            logger.error(
+                "Document processing failed: %s - %s",
+                doc_id,
+                detailed_error,
+            )
+
+        return {
+            "status": result.status.value,
+            "document_id": result.document_id,
+            "chunk_count": result.chunk_count,
+            "message": result.message,
+        }
+
+    except (Exception, asyncio.CancelledError) as e:
+        # Catch asyncio.CancelledError (raised by ARQ on job timeout) so the
+        # document status is always recorded instead of getting stuck in
+        # "processing".
+        is_timeout = isinstance(e, (TimeoutError, asyncio.CancelledError))
+        if is_timeout:
+            logger.error(
+                "Document %s timed out after %ds: %s",
+                doc_id, settings.worker_job_timeout, filename,
+            )
+        else:
+            logger.exception("Unexpected error processing document %s: %s", doc_id, e)
+        # Record the error on a fresh connection: the failure may itself have
+        # been a dropped connection, and retrying reconnects transparently.
+        try:
+            await _write_status(
+                status="error",
+                error_message=(
+                    f"Timeout after {settings.worker_job_timeout}s"
+                    if is_timeout
+                    else str(e)
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to record error status for document %s", doc_id)
+        return {"status": "error", "message": str(e)}
+    finally:
+        await engine.dispose()
 
 
 def _get_redis_settings() -> RedisSettings:
