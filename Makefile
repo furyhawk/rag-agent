@@ -88,6 +88,11 @@ help:
 	@echo "db-shell      - Open PostgreSQL shell (container)"
 	@echo "valkey-cli    - Open Valkey CLI (container)"
 	@echo "milvus-cli    - Open Milvus CLI (container)"
+	@echo ""
+	@echo "── Documentation (GitHub Pages) ──────────────────────────────"
+	@echo "docs          - Build the docs site into site/"
+	@echo "docs-serve    - Serve the docs site locally (http://127.0.0.1:8000)"
+	@echo "docs-clean    - Remove generated docs pages and site output"
 	@echo "──────────────────────────────────────────────────────────────"
 	@echo "Example: make dev-up && make dev-setup && make dev-fast"
 
@@ -127,6 +132,28 @@ typecheck:
 	uv run mypy rag_agent/
 
 .PHONY: lint format typecheck
+
+# ── Documentation (GitHub Pages) ─────────────────────────────────
+# Pages are generated from README.md + plans/ on every build, then published
+# by .github/workflows/docs.yml.
+DOCS_ADDR ?= 127.0.0.1:8000
+MKDOCS := uv run --no-project --with 'mkdocs-material>=9.5,<10'
+
+docs:
+	@echo "📚 Building docs site into site/..."
+	$(MKDOCS) python scripts/build_docs.py
+	$(MKDOCS) mkdocs build
+
+docs-serve:
+	@echo "📚 Serving docs at http://$(DOCS_ADDR)/ ..."
+	$(MKDOCS) python scripts/build_docs.py
+	$(MKDOCS) mkdocs serve --dev-addr $(DOCS_ADDR)
+
+docs-clean:
+	@echo "🧹 Removing generated docs pages and site output..."
+	rm -rf site docs/index.md docs/plans
+
+.PHONY: docs docs-serve docs-clean
 
 # ── Container Stack ──────────────────────────────────────────────
 up:

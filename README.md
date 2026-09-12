@@ -1,6 +1,10 @@
 # RAG Agent
 
+[![Docs](https://img.shields.io/badge/docs-furyhawk.github.io-blue)](https://furyhawk.github.io/rag-agent/)
+
 Production-grade, self-hosted document ingestion and retrieval service.
+
+📖 **Documentation:** <https://furyhawk.github.io/rag-agent/>
 
 ## Features
 

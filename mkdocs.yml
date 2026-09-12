@@ -1,0 +1,72 @@
+# MkDocs configuration for the GitHub Pages documentation site.
+#
+# The site is published to https://furyhawk.github.io/rag-agent/ by
+# .github/workflows/docs.yml.
+#
+# NOTE: pages are NOT committed. `scripts/build_docs.py` assembles them into
+# docs/ on every build:
+#     README.md  -> docs/index.md   (Home)
+#     plans/*.md -> docs/plans/*.md (Design notes)
+# The `nav` is intentionally omitted so MkDocs derives it from the generated
+# tree and newly added plans/ files show up without editing this file.
+
+site_name: RAG Agent
+site_description: Production-grade, self-hosted document ingestion and retrieval service.
+site_url: https://furyhawk.github.io/rag-agent/
+repo_url: https://github.com/furyhawk/rag-agent
+repo_name: furyhawk/rag-agent
+copyright: RAG Agent
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/furyhawk/rag-agent
